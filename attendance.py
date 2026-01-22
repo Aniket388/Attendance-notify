@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ====================================================
-# 🟢 FINAL STRATEGY: "CLICK THE NUMBER"
+# 🟢 FINAL STRATEGY: "THE LINK HUNTER"
 # ====================================================
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 USER_BOX_ID = "j_username"
@@ -68,7 +68,7 @@ def send_email(percentage_text, fraction_text, status_msg):
                 </div>
                 
                 <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 30px; font-size: 12px; color: #888;">
-                    <strong>Debug Status:</strong> {status_msg}<br>
+                    <strong>Bot Logic:</strong> {status_msg}<br>
                     Running automatically via GitHub Actions 🤖
                 </div>
             </div>
@@ -94,7 +94,7 @@ def main():
     chrome_options.add_argument('--ignore-certificate-errors')
     
     driver = webdriver.Chrome(options=chrome_options)
-    wait = WebDriverWait(driver, 60) # Increased timeout to 60s
+    wait = WebDriverWait(driver, 60)
 
     # Placeholders
     final_percent = "N/A"
@@ -111,74 +111,61 @@ def main():
         driver.find_element(By.CSS_SELECTOR, LOGIN_BTN_SELECTOR).click()
         print("🔓 Login Clicked...")
         
-        # 2. Wait for Dashboard & Grab Backup Data
-        print("⏳ Waiting for Dashboard...")
+        # 2. Grab Backup Data
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
+        dash_text = driver.find_element(By.TAG_NAME, "body").text
+        if re.search(r'\d+\.\d+%', dash_text):
+            final_percent = re.findall(r'(\d+\.\d+)%', dash_text)[-1] + "%"
+            print(f"💾 Backup Percentage: {final_percent}")
+
+        # 3. LINK HUNTER STRATEGY 🏹
+        # Instead of clicking text, we find the ACTUAL link to the detailed page.
+        print("🔍 Scanning for detailed view link...")
         
-        # Grab the percentage immediately (Backup)
-        dashboard_text = driver.find_element(By.TAG_NAME, "body").text
-        dash_matches = re.findall(r'(\d+\.\d+)%', dashboard_text)
-        if dash_matches:
-            final_percent = dash_matches[-1] + "%"
-            log_status = "Dashboard Only (Detailed View Click Failed)"
-            print(f"💾 Backup Percentage Found: {final_percent}")
-
-        # 3. CLICK THE NUMBER (The New Fix)
-        # We look for the element that actually contains "45.65%" (or whatever the number is)
-        # Clicking the number usually opens the detailed view.
-        try:
-            print("🖱️ Searching for clickable percentage card...")
-            # XPath: Find any element containing a percentage sign '%'
-            # We iterate to find the one that looks like the main attendance card
-            clickable_elements = driver.find_elements(By.XPATH, "//*[contains(text(),'%')]")
+        # Find all links on the page
+        all_links = driver.find_elements(By.TAG_NAME, "a")
+        target_url = ""
+        
+        for link in all_links:
+            href = link.get_attribute("href")
+            # We look for the specific file name we saw in your screenshot
+            if href and "studentCourseFileNew.htm" in href:
+                target_url = href
+                print(f"🎯 FOUND SECRET LINK: {target_url}")
+                break
+        
+        if target_url:
+            print("🚀 Navigating to Secret Link...")
+            driver.get(target_url)
             
-            clicked = False
-            for el in clickable_elements:
-                # If element has numbers and %, click it!
-                if re.search(r'\d+\.\d+%', el.text):
-                    print(f"🖱️ Clicking element with text: {el.text}")
-                    driver.execute_script("arguments[0].click();", el)
-                    clicked = True
-                    break
+            # Wait for the table
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+            time.sleep(5) # Allow data to populate
             
-            if not clicked:
-                # Backup click: Try clicking text "Attendance"
-                print("⚠️ Percentage click failed. Clicking 'Attendance' text...")
-                driver.find_element(By.PARTIAL_LINK_TEXT, "Attendance").click()
-
-            # 4. Wait for Detailed Table (21/46)
-            print("⏳ Click successful. Waiting for Detailed Table...")
-            time.sleep(10) # Wait for animation/load
+            full_text = driver.find_element(By.TAG_NAME, "body").text
             
-            # Switch to detailed frame if it exists (Just in case)
-            iframes = driver.find_elements(By.TAG_NAME, "iframe")
-            if iframes:
-                driver.switch_to.frame(0)
-                print("🔄 Switched to iframe.")
-
-            # Scan for fraction (21/46)
-            full_page_text = driver.find_element(By.TAG_NAME, "body").text
-            fraction_match = re.search(r'(\d+)\s*/\s*(\d+)', full_page_text)
-            
-            if fraction_match:
-                final_fraction = fraction_match.group(0) # e.g., "21/46"
-                log_status = "Success (Detailed Data Found)"
-                print(f"🎯 FOUND DETAILED DATA: {final_fraction}")
+            # Find 21/46
+            frac_match = re.search(r'(\d+)\s*/\s*(\d+)', full_text)
+            if frac_match:
+                final_fraction = frac_match.group(0)
+                log_status = "Detailed Data Found via Link Hunter"
+                print(f"✅ FOUND FRACTION: {final_fraction}")
             else:
-                print("⚠️ Page loaded, but 'Number/Number' pattern not found.")
-                print(f"Page Dump: {full_page_text[:200]}") # Debug print
+                log_status = "Link Opened, Table Empty"
+                print("⚠️ Link opened, but table data missing.")
+        
+        else:
+            log_status = "Detailed Link Not Found on Dashboard"
+            print("❌ Could not find 'studentCourseFileNew' link on dashboard.")
 
-        except Exception as e:
-            print(f"⚠️ Navigation Error: {e}")
-
-        # 5. Send Email
+        # 4. Send Email
         if final_percent != "N/A":
             send_email(final_percent, final_fraction, log_status)
         else:
-            print("❌ CRITICAL: No data found at all.")
+            print("❌ Critical: No data found.")
 
     except Exception as e:
-        print(f"❌ Script Crash: {e}")
+        print(f"❌ Error: {e}")
     
     finally:
         driver.quit()
