@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ====================================================
-# 🟢 FINAL STRATEGY: "THE LINK HUNTER"
+# 🟢 FINAL STRATEGY: "THE CARD FORCE CLICKER"
 # ====================================================
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 USER_BOX_ID = "j_username"
@@ -27,21 +27,17 @@ TARGET_EMAIL = os.environ["TARGET_EMAIL"]
 def send_email(percentage_text, fraction_text, status_msg):
     msg = MIMEMultipart("alternative")
     
-    # Smart Color Coding
     try:
         val = float(re.search(r'\d+\.?\d*', percentage_text).group())
         if val < 75:
             color = "#D32F2F" # Red
             alert = "🚨 LOW ATTENDANCE"
-            advice = "You are in the DANGER ZONE. Attend classes immediately!"
         else:
             color = "#388E3C" # Green
             alert = "✅ SAFE ZONE"
-            advice = "Good job! You are maintaining a safe attendance record."
     except:
         color = "#1976D2" # Blue
         alert = "📅 DAILY UPDATE"
-        advice = "Here is your latest attendance status."
 
     msg['Subject'] = f"{alert}: {percentage_text} ({fraction_text})"
     msg['From'] = SENDER_EMAIL
@@ -49,29 +45,21 @@ def send_email(percentage_text, fraction_text, status_msg):
 
     html = f"""
     <html>
-      <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <div style="background-color: {color}; padding: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 24px;">{alert}</h1>
-            </div>
-            <div style="padding: 30px;">
-                <p style="font-size: 16px; color: #555; margin-bottom: 25px;">{advice}</p>
-                
-                <div style="display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
-                    <span style="font-weight: bold; color: #333; font-size: 18px;">Total Percentage</span>
-                    <span style="font-weight: bold; color: {color}; font-size: 24px;">{percentage_text}</span>
-                </div>
-                
-                <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-                    <span style="font-weight: bold; color: #333; font-size: 18px;">Classes Attended</span>
-                    <span style="font-weight: bold; color: #555; font-size: 18px;">{fraction_text}</span>
-                </div>
-                
-                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 30px; font-size: 12px; color: #888;">
-                    <strong>Bot Logic:</strong> {status_msg}<br>
-                    Running automatically via GitHub Actions 🤖
-                </div>
-            </div>
+      <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+        <div style="background-color: white; border-top: 5px solid {color}; padding: 20px; border-radius: 5px;">
+            <h2 style="color: {color}; margin-top: 0;">{alert}</h2>
+            <table style="width: 100%; margin-top: 20px;">
+                <tr>
+                    <td><strong>Percentage:</strong></td>
+                    <td style="font-size: 24px; color: {color};"><strong>{percentage_text}</strong></td>
+                </tr>
+                <tr>
+                    <td><strong>Classes:</strong></td>
+                    <td style="font-size: 18px;">{fraction_text}</td>
+                </tr>
+            </table>
+            <hr>
+            <p style="font-size: 10px; color: grey;">Bot Logic: {status_msg}</p>
         </div>
       </body>
     </html>
@@ -94,9 +82,8 @@ def main():
     chrome_options.add_argument('--ignore-certificate-errors')
     
     driver = webdriver.Chrome(options=chrome_options)
-    wait = WebDriverWait(driver, 60)
+    wait = WebDriverWait(driver, 40)
 
-    # Placeholders
     final_percent = "N/A"
     final_fraction = "N/A"
     log_status = "Init"
@@ -111,54 +98,49 @@ def main():
         driver.find_element(By.CSS_SELECTOR, LOGIN_BTN_SELECTOR).click()
         print("🔓 Login Clicked...")
         
-        # 2. Grab Backup Data
+        # 2. Grab Backup Data (Dashboard)
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         dash_text = driver.find_element(By.TAG_NAME, "body").text
-        if re.search(r'\d+\.\d+%', dash_text):
-            final_percent = re.findall(r'(\d+\.\d+)%', dash_text)[-1] + "%"
-            print(f"💾 Backup Percentage: {final_percent}")
+        
+        # Grab the percentage text from the dashboard (e.g., 45.65%)
+        p_match = re.search(r'(\d+\.\d+)%', dash_text)
+        if p_match:
+            final_percent = p_match.group(0)
+            print(f"💾 Backup Found: {final_percent}")
 
-        # 3. LINK HUNTER STRATEGY 🏹
-        # Instead of clicking text, we find the ACTUAL link to the detailed page.
-        print("🔍 Scanning for detailed view link...")
-        
-        # Find all links on the page
-        all_links = driver.find_elements(By.TAG_NAME, "a")
-        target_url = ""
-        
-        for link in all_links:
-            href = link.get_attribute("href")
-            # We look for the specific file name we saw in your screenshot
-            if href and "studentCourseFileNew.htm" in href:
-                target_url = href
-                print(f"🎯 FOUND SECRET LINK: {target_url}")
-                break
-        
-        if target_url:
-            print("🚀 Navigating to Secret Link...")
-            driver.get(target_url)
+        # 3. CLICK THE CARD (The Fix) 🔨
+        try:
+            print("🖱️ Searching for 'Attendance' card...")
+            # We look for the element containing the PERCENTAGE (Unique to that card)
+            # This targets the exact circle you drew in the screenshot
+            card_element = driver.find_element(By.XPATH, "//*[contains(text(),'%')]")
             
-            # Wait for the table
-            wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-            time.sleep(5) # Allow data to populate
+            print(f"🖱️ Force Clicking Card with text: {card_element.text}")
+            # JavaScript Force Click (Bypasses overlays)
+            driver.execute_script("arguments[0].click();", card_element)
             
+            # 4. Wait for Detailed Table
+            print("⏳ Click sent. Waiting for table...")
+            # We wait for "Course Name" because that only exists on the next page
+            wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(),'Course Name')]")))
+            
+            # 5. Scan for Data (21/46)
             full_text = driver.find_element(By.TAG_NAME, "body").text
-            
-            # Find 21/46
             frac_match = re.search(r'(\d+)\s*/\s*(\d+)', full_text)
+            
             if frac_match:
                 final_fraction = frac_match.group(0)
-                log_status = "Detailed Data Found via Link Hunter"
-                print(f"✅ FOUND FRACTION: {final_fraction}")
+                log_status = "Success: Card Clicked & Data Found"
+                print(f"🎯 FOUND FRACTION: {final_fraction}")
             else:
-                log_status = "Link Opened, Table Empty"
-                print("⚠️ Link opened, but table data missing.")
-        
-        else:
-            log_status = "Detailed Link Not Found on Dashboard"
-            print("❌ Could not find 'studentCourseFileNew' link on dashboard.")
+                log_status = "Card Clicked, Table Empty"
+                print("⚠️ Table loaded but 21/46 pattern not found.")
 
-        # 4. Send Email
+        except Exception as e:
+            log_status = f"Card Click Failed: {str(e)[:50]}"
+            print(f"⚠️ Navigation Failed: {e}")
+
+        # 6. Send Email
         if final_percent != "N/A":
             send_email(final_percent, final_fraction, log_status)
         else:
