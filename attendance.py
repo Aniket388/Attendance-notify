@@ -1,5 +1,6 @@
 import os
 import smtplib
+import re # Added for Regex search
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from selenium import webdriver
@@ -9,23 +10,14 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ====================================================
-# 🟢 FINAL NIET CONFIGURATION
+# 🟢 FINAL NIET CONFIGURATION (SMART SEARCH EDITION)
 # ====================================================
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
-
-# IDs extracted from your screenshots
 USER_BOX_ID = "j_username"
 PASS_BOX_ID = "password-1"
-
-# Smart Selector for the button (since it has no ID)
 LOGIN_BTN_SELECTOR = "button[type='submit']"
 
-# Smart XPath: "Find the last cell in the last row of the table"
-# This grabs the value in the bottom-right corner (Total %)
-ATTENDANCE_XPATH = "//tr[last()]/td[last()]" 
-# ====================================================
-
-# Load Secrets from GitHub
+# Secrets
 COLLEGE_USER = os.environ["COLLEGE_USER"]
 COLLEGE_PASS = os.environ["COLLEGE_PASS"]
 SENDER_EMAIL = os.environ["EMAIL_USER"]
@@ -38,11 +30,11 @@ def send_email(attendance_text):
     msg['From'] = SENDER_EMAIL
     msg['To'] = TARGET_EMAIL
 
-    # Color Logic: Red if below 75, Green if above
     try:
-        numeric_val = float(attendance_text.replace('%', '').strip())
-        color = "red" if numeric_val < 75 else "green"
-        status = "⚠️ LOW ATTENDANCE" if numeric_val < 75 else "✅ YOU ARE SAFE"
+        # Clean the text (remove % and extra spaces)
+        clean_num = float(re.search(r'\d+\.?\d*', attendance_text).group())
+        color = "red" if clean_num < 75 else "green"
+        status = "⚠️ LOW ATTENDANCE" if clean_num < 75 else "✅ YOU ARE SAFE"
     except:
         color = "blue"
         status = "Daily Update"
@@ -70,45 +62,50 @@ def main():
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    
-    # ⚠️ CRITICAL FOR NIET: Fixes SSL/Certificate errors
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument('--allow-running-insecure-content')
     
     driver = webdriver.Chrome(options=chrome_options)
-    wait = WebDriverWait(driver, 20) # 20 second timeout
+    wait = WebDriverWait(driver, 30) # Increased wait to 30s
 
     try:
         print("🚀 Opening NIET Cloud...")
         driver.get(LOGIN_URL)
         
-        # 1. Enter Username
+        # Login
         wait.until(EC.visibility_of_element_located((By.ID, USER_BOX_ID))).send_keys(COLLEGE_USER)
-        
-        # 2. Enter Password
         driver.find_element(By.ID, PASS_BOX_ID).send_keys(COLLEGE_PASS)
-        
-        # 3. Click Login (Using CSS Selector for type='submit')
         driver.find_element(By.CSS_SELECTOR, LOGIN_BTN_SELECTOR).click()
         print("🔓 Login Clicked...")
         
-        # 4. Wait for Dashboard & Grab Attendance
-        # We wait for the table row to appear
-        print("⏳ Waiting for attendance table...")
-        element = wait.until(EC.presence_of_element_located((By.XPATH, ATTENDANCE_XPATH)))
+        # Wait for the table to actually load
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+        print("⏳ Table detected... scanning for numbers...")
+
+        # 🧠 SMART SEARCH STRATEGY
+        # Instead of trusting one XPath, we grab ALL text from the page
+        # and look for the pattern "Number%" (e.g. 75.5%)
         
-        text = element.text
-        print(f"📊 Captured Attendance: {text}")
+        body_text = driver.find_element(By.TAG_NAME, "body").text
         
-        if text:
-            send_email(text)
+        # Regex to find all percentages (like 75.00 or 75.5)
+        # We assume the Total is usually the LAST percentage on the page
+        matches = re.findall(r'\d+\.\d+', body_text)
+        
+        if matches:
+            # We assume the last number found is the Total Percentage
+            # (Because totals are usually at the bottom right)
+            final_score = matches[-1] + "%"
+            print(f"📊 Found Multiple Numbers: {matches}")
+            print(f"🎯 identified Total: {final_score}")
+            send_email(final_score)
         else:
-            print("❌ Found empty text. Check XPath.")
+            print("❌ Could not find any percentage numbers on the page.")
+            print("Debug Dump (First 500 chars):")
+            print(body_text[:500])
 
     except Exception as e:
         print(f"❌ Error: {e}")
-        # Debug: Print URL to see if login failed
-        print(f"Current URL: {driver.current_url}")
     
     finally:
         driver.quit()
