@@ -25,7 +25,6 @@ SENDER_PASS  = os.environ["EMAIL_PASS"]
 TARGET_EMAIL = os.environ["TARGET_EMAIL"]
 
 def get_custom_message(percentage):
-    """Returns a custom subject and message based on your score."""
     try:
         p = float(percentage)
     except:
@@ -45,16 +44,14 @@ def get_custom_message(percentage):
 def send_email(percentage_text, fraction_text):
     msg = MIMEMultipart("alternative")
     
-    # Extract just the number for logic (e.g., 45.65)
+    # Extract number for logic (e.g. 45.65)
     try:
         clean_percent = re.search(r'\d+\.?\d*', percentage_text).group()
     except:
         clean_percent = 0
 
-    # Get the smart message
     subject_prefix, body_msg, color = get_custom_message(clean_percent)
     
-    # Subject Line: "🚨 DANGER ZONE: 45.65% (21/46)"
     msg['Subject'] = f"{subject_prefix}: {percentage_text} ({fraction_text})"
     msg['From'] = SENDER_EMAIL
     msg['To'] = TARGET_EMAIL
@@ -113,29 +110,42 @@ def main():
         
         # Wait for table
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-        print("⏳ Scanning page data...")
+        print("⏳ Table found. Extracting specific cells...")
 
-        body_text = driver.find_element(By.TAG_NAME, "body").text
+        # 🧠 STRUCTURAL SEARCH (More Accurate)
+        # We go to the LAST row of the table.
+        # The Percentage is in the LAST cell.
+        # The Fraction (21/46) is in the SECOND TO LAST cell.
         
-        # 1. Find Percentage (Robust Search)
-        # Looks for patterns like "45.65" or "75.0"
-        percent_matches = re.findall(r'\d+\.\d+', body_text)
-        final_percent = percent_matches[-1] + "%" if percent_matches else "Unknown"
-        
-        # 2. Find Fraction (Fail-Safe Search)
-        # Looks for patterns like "21/46" or "21 / 46"
-        fraction_matches = re.findall(r'\d+\s*/\s*\d+', body_text)
-        
-        # We assume the last fraction found is the total (e.g. 21/46)
-        # If it finds nothing, it defaults to "N/A" instead of crashing
-        final_fraction = fraction_matches[-1] if fraction_matches else "N/A"
-        
-        print(f"🎯 Found Data -> Score: {final_percent} | Count: {final_fraction}")
-        
+        try:
+            # XPath for Last Cell (Percentage)
+            percent_element = driver.find_element(By.XPATH, "//tr[last()]/td[last()]")
+            final_percent = percent_element.text.strip()
+            
+            # XPath for Second-to-Last Cell (Fraction)
+            fraction_element = driver.find_element(By.XPATH, "//tr[last()]/td[last()-1]")
+            final_fraction = fraction_element.text.strip()
+            
+            print(f"🎯 Extracted -> Score: {final_percent} | Count: {final_fraction}")
+            
+            # Fail-safe: If XPath returns empty, fallback to regex
+            if not final_fraction:
+                raise Exception("Empty text found")
+                
+        except Exception as e:
+            print("⚠️ XPath failed, switching to backup text search...")
+            body_text = driver.find_element(By.TAG_NAME, "body").text
+            percent_matches = re.findall(r'\d+\.\d+', body_text)
+            fraction_matches = re.findall(r'\d+\s*/\s*\d+', body_text)
+            
+            final_percent = percent_matches[-1] + "%" if percent_matches else "Unknown"
+            final_fraction = fraction_matches[-1] if fraction_matches else "N/A"
+
+        # Send it!
         if final_percent != "Unknown":
             send_email(final_percent, final_fraction)
         else:
-            print("❌ Critical: Could not find any attendance numbers.")
+            print("❌ Critical: Could not find attendance data.")
 
     except Exception as e:
         print(f"❌ Error: {e}")
