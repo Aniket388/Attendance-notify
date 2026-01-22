@@ -1,0 +1,33 @@
+name: Daily Attendance Check
+
+on:
+  schedule:
+    # Runs at 02:30 UTC, which is 08:00 AM Indian Standard Time (IST)
+    - cron: '30 2 * * *'
+  workflow_dispatch: # Allows you to click a button to test it immediately
+
+jobs:
+  check-attendance:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Libraries
+        run: pip install selenium webdriver-manager
+
+      - name: Run Attendance Script
+        env:
+          # This maps your GitHub Secrets to the Python script
+          COLLEGE_USER: ${{ secrets.COLLEGE_USER }}
+          COLLEGE_PASS: ${{ secrets.COLLEGE_PASS }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          TARGET_EMAIL: ${{ secrets.TARGET_EMAIL }}
+        run: python attendance.py
