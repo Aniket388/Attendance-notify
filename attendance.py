@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ====================================================
-# 🟢 FINAL STRATEGY: "THE FAMILY TREE CLICKER"
+# 🟢 FINAL VERSION: "THE FAMILY TREE" + "TOTAL SELECTOR"
 # ====================================================
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 USER_BOX_ID = "j_username"
@@ -98,11 +98,10 @@ def main():
         driver.find_element(By.CSS_SELECTOR, LOGIN_BTN_SELECTOR).click()
         print("🔓 Login Clicked...")
         
-        # 2. Grab Backup Data (Dashboard)
+        # 2. Grab Backup Data
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         dash_text = driver.find_element(By.TAG_NAME, "body").text
         
-        # Find the specific number shown on screen (e.g. "45.65%")
         p_match = re.search(r'(\d+\.\d+)%', dash_text)
         if p_match:
             final_percent = p_match.group(0)
@@ -110,51 +109,46 @@ def main():
 
             # 3. FAMILY TREE CLICKING 🌳
             try:
-                # Find the element that HAS this text
                 xpath_query = f"//*[contains(text(),'{final_percent}')]"
                 target_element = driver.find_element(By.XPATH, xpath_query)
                 
                 print(f"🖱️ Found Number element. Attempting clicks...")
-                
-                # Attempt 1: Click the Number
                 try:
                     driver.execute_script("arguments[0].click();", target_element)
-                    print("   -> Clicked Number")
                 except: pass
                 
                 time.sleep(1)
                 
-                # Attempt 2: Click the Parent (The Box)
                 try:
                     parent_element = target_element.find_element(By.XPATH, "..")
                     driver.execute_script("arguments[0].click();", parent_element)
-                    print("   -> Clicked Parent")
                 except: pass
 
                 time.sleep(1)
 
-                # Attempt 3: Click the Grandparent (The Card)
                 try:
                     grand_element = target_element.find_element(By.XPATH, "../..")
                     driver.execute_script("arguments[0].click();", grand_element)
-                    print("   -> Clicked Grandparent")
                 except: pass
                 
                 # 4. Wait for Detailed Table
                 print("⏳ Waiting for detailed table...")
                 wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(),'Course Name')]")))
                 
-                # 5. Scan for Data (21/46)
+                # 5. Scan for Data (THE FIX IS HERE)
                 full_text = driver.find_element(By.TAG_NAME, "body").text
-                frac_match = re.search(r'(\d+)\s*/\s*(\d+)', full_text)
                 
-                if frac_match:
-                    final_fraction = frac_match.group(0)
-                    log_status = "Success: Card Clicked & Data Found"
-                    print(f"🎯 FOUND FRACTION: {final_fraction}")
+                # Find ALL matches, not just the first one
+                all_fractions = re.findall(r'\d+\s*/\s*\d+', full_text)
+                
+                if all_fractions:
+                    # [-1] grabs the LAST item in the list (The Total at the bottom)
+                    final_fraction = all_fractions[-1]
+                    log_status = "Success: Total Fraction Found"
+                    print(f"🎯 FOUND TOTAL: {final_fraction}")
                 else:
                     log_status = "Card Clicked, Table Empty"
-                    print("⚠️ Table loaded but 21/46 pattern not found.")
+                    print("⚠️ Table loaded but fraction pattern not found.")
 
             except Exception as e:
                 log_status = f"Click Sequence Failed: {str(e)[:50]}"
