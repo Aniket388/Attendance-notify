@@ -2,7 +2,6 @@ import os
 import smtplib
 import re
 import time
-import traceback
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from selenium import webdriver
@@ -12,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ====================================================
-# 🔴 DIAGNOSTIC MODE: PAGE DUMP + ERROR TRACING
+# 🟢 DIAGNOSTIC MODE: "WHAT DO YOU SEE?"
 # ====================================================
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 USER_BOX_ID = "j_username"
@@ -28,70 +27,75 @@ def main():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument('--ignore-certificate-errors')
-    # Set a big window size to ensure no data is hidden by "scroll"
+    # Big window to make sure the bottom isn't hidden
     chrome_options.add_argument("--window-size=1920,1080")
     
     driver = webdriver.Chrome(options=chrome_options)
     wait = WebDriverWait(driver, 40)
 
     try:
-        print("🔍 STEP 1: Logging in...")
+        print("🚀 Opening NIET Cloud...")
         driver.get(LOGIN_URL)
+        
+        # 1. Login
         wait.until(EC.visibility_of_element_located((By.ID, USER_BOX_ID))).send_keys(COLLEGE_USER)
         driver.find_element(By.ID, PASS_BOX_ID).send_keys(COLLEGE_PASS)
         driver.find_element(By.CSS_SELECTOR, LOGIN_BTN_SELECTOR).click()
         
-        print("🔍 STEP 2: Checking Dashboard...")
+        # 2. Grab Dashboard Data
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         dash_text = driver.find_element(By.TAG_NAME, "body").text
-        
         p_match = re.search(r'(\d+\.\d+)%', dash_text)
+        
         if p_match:
             final_percent = p_match.group(0)
-            print(f"   -> Found Percentage: {final_percent}")
+            print(f"✅ Found Percent: {final_percent}")
             
-            # CLICK SEQUENCE
-            print("🔍 STEP 3: Clicking 'Family Tree'...")
+            # 3. Click Sequence
             xpath_query = f"//*[contains(text(),'{final_percent}')]"
             target_element = driver.find_element(By.XPATH, xpath_query)
             
-            # Try clicking parent box
-            parent_element = target_element.find_element(By.XPATH, "..")
-            driver.execute_script("arguments[0].click();", parent_element)
-            print("   -> Click sent.")
-
-            # WAIT FOR TABLE
-            print("🔍 STEP 4: Waiting for Detailed Table...")
+            # Force click the card
+            try: driver.execute_script("arguments[0].click();", target_element)
+            except: pass
+            try: 
+                parent = target_element.find_element(By.XPATH, "..")
+                driver.execute_script("arguments[0].click();", parent)
+            except: pass
+            try: 
+                grand = target_element.find_element(By.XPATH, "../..")
+                driver.execute_script("arguments[0].click();", grand)
+            except: pass
+            
+            # 4. Wait for Table
+            print("⏳ Waiting for Detailed Table...")
             wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(),'Course Name')]")))
-            print("   -> Table Loaded!")
             
-            # PAGE DUMP (This is what you asked for)
-            print("\n" + "="*40)
-            print("👀 ROBOT VISION START (FULL PAGE TEXT)")
-            print("="*40)
+            # 5. DUMP ALL FRACTIONS (This is what you asked for)
             full_text = driver.find_element(By.TAG_NAME, "body").text
-            print(full_text)
-            print("="*40)
-            print("👀 ROBOT VISION END")
-            print("="*40 + "\n")
             
-            # ANALYZE FRACTIONS
-            print("🔍 STEP 5: Analyzing Fractions...")
-            # Find all patterns like "0/5", "21/46"
+            print("\n" + "="*40)
+            print("👀 ROBOT VISION REPORT")
+            print("="*40)
+            
+            # Use findall to get EVERY match, not just the first one
             all_fractions = re.findall(r'\d+\s*/\s*\d+', full_text)
-            print(f"   -> List of all fractions found: {all_fractions}")
+            
+            print(f"Total Matches Found: {len(all_fractions)}")
+            print("List of values found:")
+            for i, val in enumerate(all_fractions):
+                print(f"   [{i}] {val}")
+                
+            print("="*40)
             
             if all_fractions:
-                print(f"   -> First Item: {all_fractions[0]}")
-                print(f"   -> Last Item (Should be Total): {all_fractions[-1]}")
+                print(f"👉 The First One (What it used before): {all_fractions[0]}")
+                print(f"👉 The Last One (What we want): {all_fractions[-1]}")
             else:
-                print("   -> NO FRACTIONS FOUND.")
+                print("❌ No fractions found!")
 
-    except Exception:
-        print("\n❌ CRITICAL ERROR FOUND! HERE IS THE TRACEBACK:")
-        print("="*60)
-        traceback.print_exc()
-        print("="*60)
+    except Exception as e:
+        print(f"❌ Error: {e}")
     
     finally:
         driver.quit()
