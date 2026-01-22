@@ -26,51 +26,58 @@ TARGET_EMAIL = os.environ["TARGET_EMAIL"]
 
 def get_custom_message(percentage):
     """Returns a custom subject and message based on your score."""
-    p = float(percentage)
-    
+    try:
+        p = float(percentage)
+    except:
+        return "📅 DAILY UPDATE", "Here is your latest attendance report.", "blue"
+
     if p >= 90:
         return "👑 TOP G STATUS", "You are dominating! Feel free to bunk a few classes.", "green"
     elif p >= 80:
         return "✅ SAFE ZONE", "You are totally safe. Keep maintaining this.", "green"
     elif p >= 75:
-        return "⚠️ ON THE EDGE", "You are safe, but barely. Don't take risks!", "orange"
+        return "⚠️ ON THE EDGE", "You are safe, but barely. Don't take risks!", "#FFBF00" # Amber
     elif p >= 65:
         return "🚨 DANGER ZONE", "You are BELOW 75%! You need to attend classes immediately.", "red"
     else:
-        return "💀 CRITICAL FAILURE", "You are in huge trouble. Detained list incoming?", "red"
+        return "💀 CRITICAL FAILURE", "You are in huge trouble. Detained list incoming?", "darkred"
 
 def send_email(percentage_text, fraction_text):
     msg = MIMEMultipart("alternative")
     
-    # Extract just the number (e.g. 45.65) from text
-    clean_percent = float(re.search(r'\d+\.?\d*', percentage_text).group())
-    
+    # Extract just the number for logic (e.g., 45.65)
+    try:
+        clean_percent = re.search(r'\d+\.?\d*', percentage_text).group()
+    except:
+        clean_percent = 0
+
     # Get the smart message
     subject_prefix, body_msg, color = get_custom_message(clean_percent)
     
+    # Subject Line: "🚨 DANGER ZONE: 45.65% (21/46)"
     msg['Subject'] = f"{subject_prefix}: {percentage_text} ({fraction_text})"
     msg['From'] = SENDER_EMAIL
     msg['To'] = TARGET_EMAIL
 
     html = f"""
     <html>
-      <body style="font-family: Arial, sans-serif;">
-        <div style="border: 2px solid {color}; padding: 20px; border-radius: 10px;">
-            <h2 style="color: {color};">{subject_prefix}</h2>
-            <p style="font-size: 18px;">{body_msg}</p>
-            <hr>
+      <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+        <div style="background-color: white; border-left: 6px solid {color}; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h2 style="color: {color}; margin-top: 0;">{subject_prefix}</h2>
+            <p style="font-size: 16px; color: #333;">{body_msg}</p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
             <table style="width: 100%;">
                 <tr>
-                    <td><strong>Current Attendance:</strong></td>
-                    <td style="font-size: 24px; color: {color};"><strong>{percentage_text}</strong></td>
+                    <td style="padding: 5px;"><strong>Total Percentage:</strong></td>
+                    <td style="font-size: 24px; color: {color}; font-weight: bold;">{percentage_text}</td>
                 </tr>
                 <tr>
-                    <td><strong>Classes Attended:</strong></td>
-                    <td style="font-size: 20px;">{fraction_text}</td>
+                    <td style="padding: 5px;"><strong>Classes Attended:</strong></td>
+                    <td style="font-size: 18px; color: #555;">{fraction_text}</td>
                 </tr>
             </table>
             <br>
-            <p style="font-size: 12px; color: gray;">
+            <p style="font-size: 11px; color: #999;">
                 <i>Bot ran automatically via GitHub Actions 🤖</i>
             </p>
         </div>
@@ -104,28 +111,31 @@ def main():
         driver.find_element(By.CSS_SELECTOR, LOGIN_BTN_SELECTOR).click()
         print("🔓 Login Clicked...")
         
+        # Wait for table
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
         print("⏳ Scanning page data...")
 
         body_text = driver.find_element(By.TAG_NAME, "body").text
         
-        # 1. Find Percentages (e.g., 45.65)
+        # 1. Find Percentage (Robust Search)
+        # Looks for patterns like "45.65" or "75.0"
         percent_matches = re.findall(r'\d+\.\d+', body_text)
+        final_percent = percent_matches[-1] + "%" if percent_matches else "Unknown"
         
-        # 2. Find Fractions (e.g., 21/46)
-        # Pattern: digits, forward slash, digits
-        fraction_matches = re.findall(r'\d+/\d+', body_text)
+        # 2. Find Fraction (Fail-Safe Search)
+        # Looks for patterns like "21/46" or "21 / 46"
+        fraction_matches = re.findall(r'\d+\s*/\s*\d+', body_text)
         
-        if percent_matches and fraction_matches:
-            # We assume the LAST item found is the "Total" for both
-            final_percent = percent_matches[-1] + "%"
-            final_fraction = fraction_matches[-1]
-            
-            print(f"🎯 Found Data -> Score: {final_percent} | Count: {final_fraction}")
+        # We assume the last fraction found is the total (e.g. 21/46)
+        # If it finds nothing, it defaults to "N/A" instead of crashing
+        final_fraction = fraction_matches[-1] if fraction_matches else "N/A"
+        
+        print(f"🎯 Found Data -> Score: {final_percent} | Count: {final_fraction}")
+        
+        if final_percent != "Unknown":
             send_email(final_percent, final_fraction)
         else:
-            print("❌ Could not find data patterns.")
-            print(f"Debug: Found {len(percent_matches)} percents and {len(fraction_matches)} fractions.")
+            print("❌ Critical: Could not find any attendance numbers.")
 
     except Exception as e:
         print(f"❌ Error: {e}")
