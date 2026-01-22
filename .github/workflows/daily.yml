@@ -26,7 +26,6 @@ jobs:
 
       - name: Run Attendance Script
         env:
-          # This maps your GitHub Secrets to the Python script
           COLLEGE_USER: ${{ secrets.COLLEGE_USER }}
           COLLEGE_PASS: ${{ secrets.COLLEGE_PASS }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
