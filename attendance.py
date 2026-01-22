@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ====================================================
-# 🟢 FINAL STRATEGY: "THE CARD FORCE CLICKER"
+# 🟢 FINAL STRATEGY: "THE FAMILY TREE CLICKER"
 # ====================================================
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 USER_BOX_ID = "j_username"
@@ -102,43 +102,63 @@ def main():
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         dash_text = driver.find_element(By.TAG_NAME, "body").text
         
-        # Grab the percentage text from the dashboard (e.g., 45.65%)
+        # Find the specific number shown on screen (e.g. "45.65%")
         p_match = re.search(r'(\d+\.\d+)%', dash_text)
         if p_match:
             final_percent = p_match.group(0)
             print(f"💾 Backup Found: {final_percent}")
 
-        # 3. CLICK THE CARD (The Fix) 🔨
-        try:
-            print("🖱️ Searching for 'Attendance' card...")
-            # We look for the element containing the PERCENTAGE (Unique to that card)
-            # This targets the exact circle you drew in the screenshot
-            card_element = driver.find_element(By.XPATH, "//*[contains(text(),'%')]")
-            
-            print(f"🖱️ Force Clicking Card with text: {card_element.text}")
-            # JavaScript Force Click (Bypasses overlays)
-            driver.execute_script("arguments[0].click();", card_element)
-            
-            # 4. Wait for Detailed Table
-            print("⏳ Click sent. Waiting for table...")
-            # We wait for "Course Name" because that only exists on the next page
-            wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(),'Course Name')]")))
-            
-            # 5. Scan for Data (21/46)
-            full_text = driver.find_element(By.TAG_NAME, "body").text
-            frac_match = re.search(r'(\d+)\s*/\s*(\d+)', full_text)
-            
-            if frac_match:
-                final_fraction = frac_match.group(0)
-                log_status = "Success: Card Clicked & Data Found"
-                print(f"🎯 FOUND FRACTION: {final_fraction}")
-            else:
-                log_status = "Card Clicked, Table Empty"
-                print("⚠️ Table loaded but 21/46 pattern not found.")
+            # 3. FAMILY TREE CLICKING 🌳
+            try:
+                # Find the element that HAS this text
+                xpath_query = f"//*[contains(text(),'{final_percent}')]"
+                target_element = driver.find_element(By.XPATH, xpath_query)
+                
+                print(f"🖱️ Found Number element. Attempting clicks...")
+                
+                # Attempt 1: Click the Number
+                try:
+                    driver.execute_script("arguments[0].click();", target_element)
+                    print("   -> Clicked Number")
+                except: pass
+                
+                time.sleep(1)
+                
+                # Attempt 2: Click the Parent (The Box)
+                try:
+                    parent_element = target_element.find_element(By.XPATH, "..")
+                    driver.execute_script("arguments[0].click();", parent_element)
+                    print("   -> Clicked Parent")
+                except: pass
 
-        except Exception as e:
-            log_status = f"Card Click Failed: {str(e)[:50]}"
-            print(f"⚠️ Navigation Failed: {e}")
+                time.sleep(1)
+
+                # Attempt 3: Click the Grandparent (The Card)
+                try:
+                    grand_element = target_element.find_element(By.XPATH, "../..")
+                    driver.execute_script("arguments[0].click();", grand_element)
+                    print("   -> Clicked Grandparent")
+                except: pass
+                
+                # 4. Wait for Detailed Table
+                print("⏳ Waiting for detailed table...")
+                wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(),'Course Name')]")))
+                
+                # 5. Scan for Data (21/46)
+                full_text = driver.find_element(By.TAG_NAME, "body").text
+                frac_match = re.search(r'(\d+)\s*/\s*(\d+)', full_text)
+                
+                if frac_match:
+                    final_fraction = frac_match.group(0)
+                    log_status = "Success: Card Clicked & Data Found"
+                    print(f"🎯 FOUND FRACTION: {final_fraction}")
+                else:
+                    log_status = "Card Clicked, Table Empty"
+                    print("⚠️ Table loaded but 21/46 pattern not found.")
+
+            except Exception as e:
+                log_status = f"Click Sequence Failed: {str(e)[:50]}"
+                print(f"⚠️ Navigation Failed: {e}")
 
         # 6. Send Email
         if final_percent != "N/A":
