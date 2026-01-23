@@ -2,11 +2,25 @@ name: Daily Attendance Check
 
 on:
   schedule:
-    # 7:00 AM IST (01:30 UTC)
-    - cron: '30 1 * * *'
-    # 11:30 AM IST (06:00 UTC)
-    - cron: '0 6 * * *'
-  workflow_dispatch: # Allows manual testing
+    # -----------------------------------------------------------------
+    # ⏰ SCHEDULE (UTC TIME)
+    # India (IST) is UTC + 5:30. We subtract 5:30 from your desired time.
+    # -----------------------------------------------------------------
+
+    # ☀️ MORNING: 7:05 AM IST (01:35 UTC)
+    # (Shifted 5 mins to fix "Cold Start" bug)
+    - cron: '35 1 * * *'
+
+    # 🌤️ AFTERNOON: 11:35 AM IST (06:05 UTC)
+    # (Shifted 5 mins to fix "Cold Start" bug)
+    - cron: '5 6 * * *'
+
+    # 🌙 NIGHT (NEW): 8:30 PM IST (15:00 UTC)
+    # (Catches the 6 PM update reliably)
+    - cron: '0 15 * * *'
+
+  # Allows manual testing button
+  workflow_dispatch:
 
 jobs:
   check-attendance:
