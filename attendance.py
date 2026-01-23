@@ -14,53 +14,51 @@ from cryptography.fernet import Fernet
 import traceback
 
 # ====================================================
-# 🤖 V2: MULTI-USER MANAGER (DEBUG MODE)
+# 🤖 V2: MULTI-USER MANAGER (FINAL FIX)
 # ====================================================
 
 # CONFIGURATION
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 
-# 🛠️ Force-Convert Secrets to Strings to fix "Bytes" error
-SENDER_EMAIL = str(os.environ["EMAIL_USER"])
-SENDER_PASS  = str(os.environ["EMAIL_PASS"])
+# 🛠️ FIX: Force String + Strip invisible spaces
+SENDER_EMAIL = str(os.environ.get("EMAIL_USER", "")).strip()
+SENDER_PASS  = str(os.environ.get("EMAIL_PASS", "")).strip()
 
 # DATABASE CONNECTION
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_KEY"]
-MASTER_KEY   = os.environ["MASTER_KEY"].encode() # Keep this as bytes for Fernet
+# We also strip these just in case
+SUPABASE_URL = str(os.environ.get("SUPABASE_URL", "")).strip()
+SUPABASE_KEY = str(os.environ.get("SUPABASE_KEY", "")).strip()
+MASTER_KEY   = str(os.environ.get("MASTER_KEY", "")).strip().encode() # Encode only after stripping
 
+# Initialize Tools
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 cipher = Fernet(MASTER_KEY)
 
 def send_email(target_email, subject_line, html_content):
     print(f"   📧 Preparing email for {target_email}...")
     
-    # 🛡️ SAFETY: Force everything to be Strings
-    t_email = str(target_email)
-    sub_line = str(subject_line)
-    body_content = str(html_content)
+    # Force String format
+    t_email = str(target_email).strip()
     
     msg = MIMEMultipart("alternative")
-    msg['Subject'] = sub_line
+    msg['Subject'] = str(subject_line)
     msg['From'] = SENDER_EMAIL
     msg['To'] = t_email
-    
-    # Explicitly use UTF-8 encoding
-    msg.attach(MIMEText(body_content, "html", "utf-8"))
+    msg.attach(MIMEText(str(html_content), "html", "utf-8"))
 
     try:
         print("   🔑 Logging into Gmail...")
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            # Login
             server.login(SENDER_EMAIL, SENDER_PASS)
             
-            print("   📨 Sending payload...")
+            # Send
             server.sendmail(SENDER_EMAIL, t_email, msg.as_string())
             
         print(f"   ✅ Email sent successfully!")
         return True
     except Exception as e:
         print(f"   ❌ Email Failed: {e}")
-        # Print the full error details to the log
         traceback.print_exc()
         return False
 
