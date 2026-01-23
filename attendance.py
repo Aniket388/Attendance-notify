@@ -14,30 +14,34 @@ from cryptography.fernet import Fernet
 import traceback
 
 # ====================================================
-# 🤖 V2: MULTI-USER MANAGER (FINAL FIX)
+# 🤖 V2: DEBUGGER EDITION (Port 587 Fix)
 # ====================================================
 
 # CONFIGURATION
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 
-# 🛠️ FIX: Force String + Strip invisible spaces
-SENDER_EMAIL = str(os.environ.get("EMAIL_USER", "")).strip()
-SENDER_PASS  = str(os.environ.get("EMAIL_PASS", "")).strip()
+# 1.🕵️ PINPOINT DEBUGGER: CHECK TYPES
+print("🔍 DEBUG: Loading Secrets...")
+raw_email = os.environ.get("EMAIL_USER", "")
+raw_pass  = os.environ.get("EMAIL_PASS", "")
 
-# DATABASE CONNECTION
-# We also strip these just in case
+print(f"   👉 Email Type: {type(raw_email)}")
+print(f"   👉 Pass Type:  {type(raw_pass)}")
+
+# Force Clean String
+SENDER_EMAIL = str(raw_email).strip()
+SENDER_PASS  = str(raw_pass).strip()
+
+# DATABASE
 SUPABASE_URL = str(os.environ.get("SUPABASE_URL", "")).strip()
 SUPABASE_KEY = str(os.environ.get("SUPABASE_KEY", "")).strip()
-MASTER_KEY   = str(os.environ.get("MASTER_KEY", "")).strip().encode() # Encode only after stripping
+MASTER_KEY   = str(os.environ.get("MASTER_KEY", "")).strip().encode()
 
-# Initialize Tools
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 cipher = Fernet(MASTER_KEY)
 
 def send_email(target_email, subject_line, html_content):
     print(f"   📧 Preparing email for {target_email}...")
-    
-    # Force String format
     t_email = str(target_email).strip()
     
     msg = MIMEMultipart("alternative")
@@ -47,12 +51,18 @@ def send_email(target_email, subject_line, html_content):
     msg.attach(MIMEText(str(html_content), "html", "utf-8"))
 
     try:
-        print("   🔑 Logging into Gmail...")
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            # Login
+        # 2. 🔄 FIX: SWITCH TO PORT 587 (TLS)
+        # This handles the handshake differently and fixes the "bytes" error.
+        print("   🔑 Connecting via TLS (Port 587)...")
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.ehlo()
+            server.starttls() # Secure the connection
+            server.ehlo()
+            
+            print("   🔓 Logging in...")
             server.login(SENDER_EMAIL, SENDER_PASS)
             
-            # Send
+            print("   📨 Sending payload...")
             server.sendmail(SENDER_EMAIL, t_email, msg.as_string())
             
         print(f"   ✅ Email sent successfully!")
@@ -69,7 +79,6 @@ def check_attendance_for_user(user):
     print(f"\n🔄 Processing User: {college_id}...")
     
     try:
-        # Decrypt Password
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
     except:
         print("   ❌ Decryption Failed. Wrong Master Key?")
@@ -93,13 +102,10 @@ def check_attendance_for_user(user):
 
     try:
         driver.get(LOGIN_URL)
-        
-        # Login
         wait.until(EC.visibility_of_element_located((By.ID, "j_username"))).send_keys(college_id)
         driver.find_element(By.ID, "password-1").send_keys(college_pass)
         driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
         
-        # Check Dashboard
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         dash_text = driver.find_element(By.TAG_NAME, "body").text
         p_match = re.search(r'(\d+\.\d+)%', dash_text)
@@ -108,7 +114,6 @@ def check_attendance_for_user(user):
             final_percent = p_match.group(0)
             print(f"   📊 Found Percentage: {final_percent}")
             
-            # Navigate to Detail
             try:
                 xpath_query = f"//*[contains(text(),'{final_percent}')]"
                 target = driver.find_element(By.XPATH, xpath_query)
@@ -116,11 +121,9 @@ def check_attendance_for_user(user):
                 try: driver.execute_script("arguments[0].click();", target.find_element(By.XPATH, ".."))
                 except: pass
                 
-                # Wait for Table
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
                 time.sleep(2)
                 
-                # Scrape
                 rows = driver.find_elements(By.TAG_NAME, "tr")
                 for row in rows:
                     cols = row.find_elements(By.TAG_NAME, "td")
@@ -142,7 +145,6 @@ def check_attendance_for_user(user):
                         
                         table_html += f"<tr style='{bg} {style}'><td style='padding:8px;'>{subj}</td><td style='text-align:center;'>{cnt}</td><td style='text-align:right;'>{per}%</td></tr>"
 
-                # Fraction
                 full_text = driver.find_element(By.TAG_NAME, "body").text
                 fracs = re.findall(r'\d+\s*/\s*\d+', full_text)
                 if fracs: final_fraction = fracs[-1]
@@ -151,7 +153,6 @@ def check_attendance_for_user(user):
             except:
                 print("   ⚠️ Could not open detailed table (sending summary only)")
 
-            # Prepare Email
             try:
                 val = float(re.search(r'\d+\.?\d*', final_percent).group())
                 alert, color = ("🚨 LOW ATTENDANCE", "#D32F2F") if val < 75 else ("✅ SAFE ZONE", "#388E3C")
