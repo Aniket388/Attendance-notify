@@ -38,7 +38,7 @@ jobs:
 
       - name: Install Libraries
         # We added 'supabase' and 'cryptography' here
-        run: pip install selenium webdriver-manager supabase cryptography
+        run: run: pip install selenium webdriver-manager supabase cryptography google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
 
       - name: Run Attendance Script
         env:
