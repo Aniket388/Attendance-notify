@@ -2,6 +2,7 @@ import os
 import smtplib
 import re
 import time
+import base64  # Added for manual auth
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from selenium import webdriver
@@ -14,23 +15,15 @@ from cryptography.fernet import Fernet
 import traceback
 
 # ====================================================
-# 🤖 V2: DEBUGGER EDITION (Port 587 Fix)
+# 🤖 V2: MANUAL OVERRIDE EDITION
 # ====================================================
 
 # CONFIGURATION
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 
-# 1.🕵️ PINPOINT DEBUGGER: CHECK TYPES
-print("🔍 DEBUG: Loading Secrets...")
-raw_email = os.environ.get("EMAIL_USER", "")
-raw_pass  = os.environ.get("EMAIL_PASS", "")
-
-print(f"   👉 Email Type: {type(raw_email)}")
-print(f"   👉 Pass Type:  {type(raw_pass)}")
-
-# Force Clean String
-SENDER_EMAIL = str(raw_email).strip()
-SENDER_PASS  = str(raw_pass).strip()
+# 1. CLEAN SECRETS
+SENDER_EMAIL = str(os.environ.get("EMAIL_USER", "")).strip()
+SENDER_PASS  = str(os.environ.get("EMAIL_PASS", "")).strip()
 
 # DATABASE
 SUPABASE_URL = str(os.environ.get("SUPABASE_URL", "")).strip()
@@ -51,17 +44,27 @@ def send_email(target_email, subject_line, html_content):
     msg.attach(MIMEText(str(html_content), "html", "utf-8"))
 
     try:
-        # 2. 🔄 FIX: SWITCH TO PORT 587 (TLS)
-        # This handles the handshake differently and fixes the "bytes" error.
         print("   🔑 Connecting via TLS (Port 587)...")
         with smtplib.SMTP('smtp.gmail.com', 587) as server:
             server.ehlo()
-            server.starttls() # Secure the connection
+            server.starttls()
             server.ehlo()
             
-            print("   🔓 Logging in...")
-            server.login(SENDER_EMAIL, SENDER_PASS)
+            # 🛑 MANUAL OVERRIDE: BYPASS server.login()
+            # We construct the "Auth Token" manually to prevent TypeErrors
+            print("   🔓 Authenticating (Manual Mode)...")
             
+            # Create the string "\0username\0password"
+            auth_str = f"\0{SENDER_EMAIL}\0{SENDER_PASS}"
+            # Encode to Base64 Bytes, then Decode to String
+            auth_b64 = base64.b64encode(auth_str.encode("utf-8")).decode("ascii")
+            
+            # Send the command directly
+            code, resp = server.docmd("AUTH", "PLAIN " + auth_b64)
+            
+            if code != 235:
+                raise Exception(f"Auth Failed: {code} {resp}")
+
             print("   📨 Sending payload...")
             server.sendmail(SENDER_EMAIL, t_email, msg.as_string())
             
@@ -69,7 +72,9 @@ def send_email(target_email, subject_line, html_content):
         return True
     except Exception as e:
         print(f"   ❌ Email Failed: {e}")
-        traceback.print_exc()
+        # Only print traceback if it's NOT an auth failure (to keep logs clean)
+        if "Auth Failed" not in str(e):
+            traceback.print_exc()
         return False
 
 def check_attendance_for_user(user):
