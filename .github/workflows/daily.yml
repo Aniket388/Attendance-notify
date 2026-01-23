@@ -8,16 +8,14 @@ on:
     # -----------------------------------------------------------------
 
     # ☀️ MORNING: 7:05 AM IST (01:35 UTC)
-    # (Shifted 5 mins to fix "Cold Start" bug)
     - cron: '35 1 * * *'
 
     # 🌤️ AFTERNOON: 11:35 AM IST (06:05 UTC)
-    # (Shifted 5 mins to fix "Cold Start" bug)
     - cron: '5 6 * * *'
 
-    # 🌙 NIGHT (NEW): 8:30 PM IST (15:00 UTC)
-    # (Catches the 6 PM update reliably)
-    - cron: '0 15 * * *'
+    # 🌙 NIGHT (NEW): 6:30 PM IST (13:00 UTC)
+    # (Checking shortly after the 6 PM college update)
+    - cron: '0 13 * * *'
 
   # Allows manual testing button
   workflow_dispatch:
