@@ -1,46 +1,13 @@
-name: Daily Attendance Check
-
-on:
-  schedule:
-    # -----------------------------------------------------------------
-    # ⏰ SCHEDULE (UTC TIME)
-    # India (IST) is UTC + 5:30. We subtract 5:30 from your desired time.
-    # -----------------------------------------------------------------
-
-    # ☀️ MORNING: 7:05 AM IST (01:35 UTC)
-    - cron: '35 1 * * *'
-
-    # 🌤️ AFTERNOON: 11:35 AM IST (06:05 UTC)
-    - cron: '5 6 * * *'
-
-    # 🌙 NIGHT (NEW): 6:30 PM IST (13:00 UTC)
-    # (Checking shortly after the 6 PM college update)
-    - cron: '0 13 * * *'
-
-  # Allows manual testing button
-  workflow_dispatch:
-
-jobs:
-  check-attendance:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
-      - name: Install Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      - name: Install Libraries
-        run: pip install selenium webdriver-manager
+- name: Install Libraries
+        # ⚠️ ADDED supabase and cryptography HERE
+        run: pip install selenium webdriver-manager supabase cryptography
 
       - name: Run Attendance Script
         env:
-          COLLEGE_USER: ${{ secrets.COLLEGE_USER }}
-          COLLEGE_PASS: ${{ secrets.COLLEGE_PASS }}
+          # ⚠️ CHANGED: Now using Database Secrets
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MASTER_KEY: ${{ secrets.MASTER_KEY }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-          TARGET_EMAIL: ${{ secrets.TARGET_EMAIL }}
         run: python attendance.py
