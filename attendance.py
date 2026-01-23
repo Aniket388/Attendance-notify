@@ -11,39 +11,57 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from supabase import create_client, Client
 from cryptography.fernet import Fernet
+import traceback
 
 # ====================================================
-# 🤖 V2: MULTI-USER MANAGER
+# 🤖 V2: MULTI-USER MANAGER (DEBUG MODE)
 # ====================================================
 
 # CONFIGURATION
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
-SENDER_EMAIL = os.environ["EMAIL_USER"]
-SENDER_PASS  = os.environ["EMAIL_PASS"]
+
+# 🛠️ Force-Convert Secrets to Strings to fix "Bytes" error
+SENDER_EMAIL = str(os.environ["EMAIL_USER"])
+SENDER_PASS  = str(os.environ["EMAIL_PASS"])
 
 # DATABASE CONNECTION
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
-MASTER_KEY   = os.environ["MASTER_KEY"].encode()
+MASTER_KEY   = os.environ["MASTER_KEY"].encode() # Keep this as bytes for Fernet
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 cipher = Fernet(MASTER_KEY)
 
 def send_email(target_email, subject_line, html_content):
+    print(f"   📧 Preparing email for {target_email}...")
+    
+    # 🛡️ SAFETY: Force everything to be Strings
+    t_email = str(target_email)
+    sub_line = str(subject_line)
+    body_content = str(html_content)
+    
     msg = MIMEMultipart("alternative")
-    msg['Subject'] = subject_line
+    msg['Subject'] = sub_line
     msg['From'] = SENDER_EMAIL
-    msg['To'] = target_email
-    msg.attach(MIMEText(html_content, "html"))
+    msg['To'] = t_email
+    
+    # Explicitly use UTF-8 encoding
+    msg.attach(MIMEText(body_content, "html", "utf-8"))
 
     try:
+        print("   🔑 Logging into Gmail...")
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(SENDER_EMAIL, SENDER_PASS)
-            server.sendmail(SENDER_EMAIL, target_email, msg.as_string())
-        print(f"   ✅ Email sent to {target_email}")
+            
+            print("   📨 Sending payload...")
+            server.sendmail(SENDER_EMAIL, t_email, msg.as_string())
+            
+        print(f"   ✅ Email sent successfully!")
         return True
     except Exception as e:
         print(f"   ❌ Email Failed: {e}")
+        # Print the full error details to the log
+        traceback.print_exc()
         return False
 
 def check_attendance_for_user(user):
@@ -68,7 +86,7 @@ def check_attendance_for_user(user):
     chrome_options.add_argument("--window-size=1920,1080")
     
     driver = webdriver.Chrome(options=chrome_options)
-    wait = WebDriverWait(driver, 25) # 25s Timeout
+    wait = WebDriverWait(driver, 25)
 
     final_percent = "N/A"
     final_fraction = "N/A"
@@ -90,6 +108,7 @@ def check_attendance_for_user(user):
         
         if p_match:
             final_percent = p_match.group(0)
+            print(f"   📊 Found Percentage: {final_percent}")
             
             # Navigate to Detail
             try:
@@ -109,12 +128,11 @@ def check_attendance_for_user(user):
                     cols = row.find_elements(By.TAG_NAME, "td")
                     if len(cols) >= 4:
                         subj = cols[1].text.strip()
-                        if not subj: continue # Ghost Buster
+                        if not subj: continue 
                         
                         cnt = cols[-2].text.strip()
                         per = cols[-1].text.strip()
                         
-                        # Style
                         bg = "border-bottom:1px solid #eee;"
                         style = ""
                         if "Total" in cols[0].text or "Total" in subj:
@@ -167,7 +185,6 @@ def check_attendance_for_user(user):
 def main():
     print("🚀 BOT STARTED: Fetching Users from Supabase...")
     try:
-        # Fetch Active Users
         response = supabase.table("users").select("*").eq("is_active", True).execute()
         users = response.data
         print(f"📋 Found {len(users)} active users.")
