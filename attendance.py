@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ====================================================
-# 🟢 V2 ENGINE: FULL TABLE & MULTI-USER READY
+# 🟢 V2 ENGINE (POLISHED): GHOST ROW FIX
 # ====================================================
 
 # CONFIGURATION
@@ -20,7 +20,7 @@ USER_BOX_ID = "j_username"
 PASS_BOX_ID = "password-1"
 LOGIN_BTN_SELECTOR = "button[type='submit']"
 
-# Credentials from Environment (For now)
+# Credentials
 COLLEGE_USER = os.environ["COLLEGE_USER"]
 COLLEGE_PASS = os.environ["COLLEGE_PASS"]
 SENDER_EMAIL = os.environ["EMAIL_USER"]
@@ -28,10 +28,8 @@ SENDER_PASS  = os.environ["EMAIL_PASS"]
 TARGET_EMAIL = os.environ["TARGET_EMAIL"]
 
 def send_full_report(percentage_text, fraction_text, table_rows_html, status_msg):
-    """Sends a beautiful HTML email with the full subject breakdown."""
     msg = MIMEMultipart("alternative")
     
-    # Smart Alert System
     try:
         val = float(re.search(r'\d+\.?\d*', percentage_text).group())
         if val < 75:
@@ -99,7 +97,7 @@ def main():
     chrome_options.add_argument("--window-size=1920,1080")
     
     driver = webdriver.Chrome(options=chrome_options)
-    wait = WebDriverWait(driver, 50) # 50s Timeout
+    wait = WebDriverWait(driver, 50)
 
     final_percent = "N/A"
     final_fraction = "N/A"
@@ -125,7 +123,6 @@ def main():
             
             # 3. Open Detailed View
             try:
-                # Find any element with the percentage and click it/parents
                 xpath_query = f"//*[contains(text(),'{final_percent}')]"
                 target = driver.find_element(By.XPATH, xpath_query)
                 driver.execute_script("arguments[0].click();", target)
@@ -137,9 +134,8 @@ def main():
                 # 4. Intelligent Table Wait
                 print("⏳ Waiting for table to stabilize...")
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
-                time.sleep(2) # Initial buffer
+                time.sleep(2)
                 
-                # Check for stability (wait until row count stops changing)
                 last_count = 0
                 for _ in range(5):
                     rows = driver.find_elements(By.TAG_NAME, "tr")
@@ -154,9 +150,14 @@ def main():
                 
                 for row in rows:
                     cols = row.find_elements(By.TAG_NAME, "td")
-                    # Valid rows usually have 4+ columns (Code, Name, ..., Count, %)
+                    
                     if len(cols) >= 4:
                         subj_name = cols[1].text.strip()
+                        
+                        # 🚫 GHOST BUSTER FIX: If name is empty, SKIP IT!
+                        if not subj_name:
+                            continue
+                            
                         att_count = cols[-2].text.strip()
                         att_perc  = cols[-1].text.strip()
                         
@@ -164,15 +165,13 @@ def main():
                         bg_style = "border-bottom: 1px solid #eee;"
                         row_style = ""
                         
-                        # Highlight Total Row
                         if "Total" in cols[0].text or "Total" in subj_name:
                             bg_style = "background-color: #e8f5e9; font-weight: bold; border-top: 2px solid #aaa;"
                             subj_name = "GRAND TOTAL"
                         
-                        # Highlight Low Attendance Rows
                         try:
                             if float(att_perc) < 75 and "Total" not in subj_name:
-                                row_style = "color: #D32F2F;" # Red Text
+                                row_style = "color: #D32F2F;"
                         except: pass
 
                         table_html += f"""
@@ -183,7 +182,6 @@ def main():
                         </tr>
                         """
 
-                # 6. Extract Final Fraction for Subject Line
                 full_text = driver.find_element(By.TAG_NAME, "body").text
                 all_fractions = re.findall(r'\d+\s*/\s*\d+', full_text)
                 if all_fractions:
@@ -194,7 +192,6 @@ def main():
                 log_status = f"Nav Error: {str(e)[:50]}"
                 print(f"⚠️ Navigation Error: {e}")
 
-        # 7. Send the Upgrade Email
         if final_percent != "N/A":
             send_full_report(final_percent, final_fraction, table_html, log_status)
         else:
