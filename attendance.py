@@ -3,7 +3,8 @@ import re
 import time
 import json
 import base64
-import argparse  # <--- NEW: To read shard ID
+import argparse
+import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from selenium import webdriver
@@ -17,7 +18,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🚀 BOT V5.1: LOAD BALANCED (CARD DEALER MODE)
+# 🎭 BOT V6.0: PERSONALITY EDITION
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -31,6 +32,38 @@ TOKEN_JSON   = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
 # 2. INIT CLIENTS
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 cipher = Fernet(MASTER_KEY)
+
+# 🧠 BRAIN: MOTIVATION LOGIC
+def get_personality(percentage):
+    p = float(percentage)
+    if p >= 90:
+        return {
+            "quote": "Absolute Legend! 🏆 You basically live at college.",
+            "status": "Safe Category",
+            "color": "#388E3C", # Green
+            "subject_icon": "🏆"
+        }
+    elif p >= 75:
+        return {
+            "quote": "You are Safe! ✅ Keep maintaining this flow.",
+            "status": "Safe Category",
+            "color": "#388E3C", # Green
+            "subject_icon": "✅"
+        }
+    elif p >= 60:
+        return {
+            "quote": "⚠️ You are on thin ice! Don't skip anymore classes.",
+            "status": "Attendance is Low",
+            "color": "#F57C00", # Orange
+            "subject_icon": "⚠️"
+        }
+    else:
+        return {
+            "quote": "🚨 DANGER ZONE! Run to college immediately!",
+            "status": "CRITICAL LOW",
+            "color": "#D32F2F", # Red
+            "subject_icon": "🚨"
+        }
 
 def send_email_via_api(target_email, subject, html_content):
     print(f"   📧 Sending via Gmail API to {target_email}...")
@@ -140,29 +173,75 @@ def check_attendance_for_user(user):
                     if len(cols) >= 4:
                         subj = cols[1].text.strip()
                         if not subj: continue
+                        
+                        # 📊 GET COUNTS (Attended / Delivered)
+                        # Usually in the 2nd to last column (cols[-2])
+                        count_text = cols[-2].text.strip()
                         per = cols[-1].text.strip()
+                        
                         bg = "border-bottom:1px solid #eee;"
-                        style = ""
+                        text_style = "color:#333;"
+                        count_style = "color:#666; font-size: 0.85em;"
+                        
                         if "Total" in cols[0].text: 
-                            bg = "background-color:#e8f5e9;font-weight:bold;"
-                            subj = "TOTAL"
-                        if float(per) < 75 and "TOTAL" not in subj: style = "color:#D32F2F;"
-                        table_html += f"<tr style='{bg} {style}'><td style='padding:5px;'>{subj}</td><td style='text-align:right;'>{per}%</td></tr>"
+                            bg = "background-color:#f0f7ff; font-weight:bold; border-top: 2px solid #ddd;"
+                            subj = "GRAND TOTAL"
+                            text_style = "color:#000;"
+                        
+                        if float(per) < 75 and "TOTAL" not in subj: 
+                            text_style = "color:#D32F2F; font-weight:bold;"
+                            count_style = "color:#D32F2F; font-size: 0.85em;"
+                        
+                        table_html += f"""
+                        <tr style='{bg}'>
+                            <td style='padding:12px 5px; {text_style}'>{subj}</td>
+                            <td style='text-align:right; padding:12px 5px;'>
+                                <div style='{text_style}'>{per}%</div>
+                                <div style='{count_style}'>{count_text}</div>
+                            </td>
+                        </tr>
+                        """
             except: pass
 
+            # --- BUILD EMAIL ---
             try:
                 val = float(re.search(r'\d+\.?\d*', final_percent).group())
-                alert, color = ("🚨 LOW", "#D32F2F") if val < 75 else ("✅ SAFE", "#388E3C")
-            except: alert, color = ("📅 UPDATE", "#1976D2")
+                personality = get_personality(val)
+            except: 
+                personality = {
+                    "quote": "Attendance Updated", 
+                    "status": "Update", 
+                    "color": "#1976D2",
+                    "subject_icon": "📅"
+                }
+
+            subject_line = f"{personality['subject_icon']} {personality['status']}: {final_percent}"
 
             html_body = f"""
-            <div style="font-family:sans-serif;max-width:500px;margin:auto;border:1px solid #ddd;padding:20px;border-radius:10px;">
-                <h2 style="color:{color};text-align:center;">{alert}: {final_percent}</h2>
-                <table style="width:100%;border-collapse:collapse;">{table_html}</table>
-                <p style="text-align:center;color:#aaa;font-size:10px;margin-top:20px;">NIET Bot V5.1 (Load Balanced)</p>
+            <div style="font-family:'Segoe UI', sans-serif; max-width:500px; margin:auto; border:1px solid #e0e0e0; border-radius:12px; overflow:hidden;">
+                
+                <div style="background:{personality['color']}; padding:25px; text-align:center; color:white;">
+                    <h1 style="margin:0; font-size:2.8em; font-weight:bold;">{final_percent}</h1>
+                    <p style="margin:5px 0 0 0; font-size:1.1em; opacity:0.95;">{personality['status']}</p>
+                </div>
+
+                <div style="padding:15px 20px; background:#fafafa; text-align:center; border-bottom:1px solid #eee;">
+                    <p style="margin:0; color:#555; font-style:italic;">"{personality['quote']}"</p>
+                </div>
+
+                <div style="padding:0;">
+                    <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
+                        {table_html}
+                    </table>
+                </div>
+
+                <div style="background:#f5f5f5; padding:15px; text-align:center; font-size:0.75em; color:#999;">
+                    NIET Attendance Bot V6.0 • <a href="https://attendance-notify.vercel.app/" style="color:#999; text-decoration:underline;">Update Settings</a>
+                </div>
             </div>
             """
-            send_email_via_api(target_email, f"{alert}: {final_percent}", html_body)
+            
+            send_email_via_api(target_email, subject_line, html_body)
     
     except Exception as e:
         print(f"   ❌ Login/Scrape Error: {e}")
@@ -180,13 +259,13 @@ def check_attendance_for_user(user):
         driver.quit()
 
 def main():
-    # ⚡ NEW: ARGS FOR WORKER ID
+    # ⚡ ARGS FOR WORKER ID (LOAD BALANCING)
     parser = argparse.ArgumentParser()
     parser.add_argument("--shard_id", type=int, default=0, help="Current Worker ID (0, 1, 2...)")
     parser.add_argument("--total_shards", type=int, default=1, help="Total number of Workers")
     args = parser.parse_args()
 
-    print(f"🚀 BOT V5.1 STARTED: Worker {args.shard_id + 1} of {args.total_shards}")
+    print(f"🚀 BOT V6.0 STARTED: Worker {args.shard_id + 1} of {args.total_shards}")
 
     try:
         # 1. FETCH ALL ACTIVE USERS
@@ -198,8 +277,6 @@ def main():
             return
 
         # 2. 🃏 DEAL THE CARDS (Modulo Logic)
-        # This keeps users 1, 5, 9... for Worker 1
-        # And users 2, 6, 10... for Worker 2, etc.
         my_users = [u for i, u in enumerate(all_users) if i % args.total_shards == args.shard_id]
 
         print(f"📋 Total Users: {len(all_users)} | My Share: {len(my_users)}")
