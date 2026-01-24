@@ -1,27 +1,6 @@
 name: Daily Attendance Check
 
 on:
-  schedule:
-    # ⏰ SCHEDULE (UTC TIME)
-    # India (IST) is UTC + 5:30.
-    # 6:30 AM IST = 1:00 AM UTC
-    #- cron: '0 1 * * *'
-    # ⏰ TEST SCHEDULE (UTC TIME)
-    # 11:30 AM UTC = 5:00 PM IST
-    #- cron: '30 11 * * *'
-    # ⏰ OFF-PEAK TEST: 6:57 PM IST (1:27 PM UTC)
-    # Using a "random" minute (27) to bypass server traffic.
-    #- cron: '27 13 * * *'
-    # ⏰ FINAL SCHEDULE
-    # 5:52 AM IST = 00:22 AM UTC
-    - cron: '22 0 * * *'
-    
-
-
-
-
-
-  # Keep manual trigger for testing
   workflow_dispatch:
 
 jobs:
