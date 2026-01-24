@@ -12,42 +12,161 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 MASTER_KEY   = os.environ.get("MASTER_KEY")
 
-# HTML Template
+# 🎨 MODERN DARK UI (Glassmorphism + Moving Aurora)
 HTML_PAGE = """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NIET Attendance Bot</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: -apple-system, sans-serif; background: #f4f4f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        h1 { color: #333; text-align: center; margin-bottom: 0.5rem; }
-        p { color: #666; text-align: center; margin-bottom: 1.5rem; font-size: 0.9rem; }
-        input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #0070f3; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 10px; }
-        button:hover { background: #0051a2; }
-        .message { padding: 10px; margin-top: 15px; border-radius: 6px; text-align: center; font-size: 0.9rem; }
-        .success { background: #e6fffa; color: #0070f3; border: 1px solid #b2f5ea; }
-        .error { background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; }
+        :root {
+            --bg-color: #0a0a0a;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #ededed;
+            --text-muted: #888;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+        }
+
+        * { box-sizing: border-box; transition: all 0.3s ease; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 🌌 MOVING BACKGROUND */
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: -1;
+            opacity: 0.4;
+            animation: float 20s infinite alternate;
+        }
+        .orb-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: #4c1d95; animation-delay: 0s; }
+        .orb-2 { bottom: -10%; right: -10%; width: 40vw; height: 40vw; background: #0f4c75; animation-delay: -5s; }
+        .orb-3 { top: 40%; left: 40%; width: 30vw; height: 30vw; background: #be185d; animation-delay: -10s; }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(30px, 50px) scale(1.1); }
+        }
+
+        /* 🪟 GLASS CARD */
+        .container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            padding: 3rem;
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            animation: popIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        @keyframes popIn {
+            0% { opacity: 0; transform: translateY(20px) scale(0.95); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        h1 { margin: 0 0 0.5rem; font-size: 2rem; letter-spacing: -1px; background: linear-gradient(to right, #fff, #aaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        p { color: var(--text-muted); margin-bottom: 2rem; font-size: 0.95rem; line-height: 1.5; }
+
+        /* ⌨️ INPUTS */
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+        }
+        input:focus {
+            border-color: var(--accent);
+            background: rgba(0, 0, 0, 0.4);
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+        }
+        input::placeholder { color: #555; }
+
+        /* 🚀 BUTTON */
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 10px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        button:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+        }
+        button:active { transform: translateY(0); }
+
+        /* 🔔 MESSAGES */
+        .message {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            animation: fadeIn 0.5s ease;
+        }
+        .success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); }
+        .error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .footer { margin-top: 2rem; font-size: 0.75rem; color: #444; }
     </style>
 </head>
 <body>
+
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
     <div class="container">
         <h1>🤖 NIET Bot</h1>
-        <p>Get daily attendance reports in your inbox.</p>
+        <p>Automated attendance tracking. <br> Join 200+ students getting daily reports.</p>
         
         <form method="POST">
-            <input type="text" name="college_id" placeholder="College ID (e.g. 0221... @niet.co.in)" required>
-            <input type="password" name="password" placeholder="NIET Password" required>
-            <input type="email" name="email" placeholder="Target Email" required>
+            <input type="text" name="college_id" placeholder="College ID (e.g. @niet.co.in)" required autocomplete="off">
+            <input type="password" name="password" placeholder="ERP Password" required>
+            <input type="email" name="email" placeholder="Your Personal Email" required autocomplete="off">
             <button type="submit">Activate Bot 🚀</button>
         </form>
 
         {% if message %}
             <div class="message {{ status }}">{{ message }}</div>
         {% endif %}
+
+        <div class="footer">Secure • Encrypted • Automated</div>
     </div>
+
 </body>
 </html>
 """
@@ -59,7 +178,7 @@ def home():
 
     if request.method == 'POST':
         try:
-            # 1. Get Data & CLEAN IT (Trim spaces, Lowercase ID)
+            # 1. Get Data & CLEAN IT
             college_id = request.form.get('college_id', '').strip().lower()
             password = request.form.get('password', '').strip()
             email = request.form.get('email', '').strip()
@@ -95,10 +214,10 @@ def home():
 
             if check.data:
                 supabase.table("users").update(data).eq("college_id", college_id).execute()
-                message = "✅ Updated! Your password has been fixed."
+                message = "✅ Welcome Back! Your details are updated."
             else:
                 supabase.table("users").insert(data).execute()
-                message = "🎉 Success! You are subscribed."
+                message = "🎉 You're in! Expect an email tomorrow morning."
             
             status = "success"
 
