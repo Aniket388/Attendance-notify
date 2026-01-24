@@ -5,7 +5,10 @@ on:
     # ⏰ SCHEDULE (UTC TIME)
     # India (IST) is UTC + 5:30.
     # 6:30 AM IST = 1:00 AM UTC
-    - cron: '0 1 * * *'
+    #- cron: '0 1 * * *'
+    # ⏰ TEST SCHEDULE (UTC TIME)
+    # 11:30 AM UTC = 5:00 PM IST
+    - cron: '30 11 * * *'
 
   # Keep manual trigger for testing
   workflow_dispatch:
