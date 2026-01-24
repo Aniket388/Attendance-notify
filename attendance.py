@@ -96,7 +96,7 @@ def check_attendance_for_user(user):
     try:
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
     except:
-        print("   ❌ Decryption Failed")
+        print("    ❌ Decryption Failed")
         return
 
     # BROWSER SETUP
@@ -124,6 +124,7 @@ def check_attendance_for_user(user):
     
     final_percent = "N/A"
     table_html = ""
+    grand_total_text = ""  # 🆕 VARIABLE TO STORE "27/54"
 
     try:
         driver.get(LOGIN_URL)
@@ -148,13 +149,13 @@ def check_attendance_for_user(user):
         
         if current_fails > 0:
             supabase.table("users").update({"fail_count": 0}).eq("college_id", user_id).execute()
-            print("   ✨ Login Success! Fail count reset.")
+            print("    ✨ Login Success! Fail count reset.")
 
         dash_text = driver.find_element(By.TAG_NAME, "body").text
         
         if p_match := re.search(r'(\d+\.\d+)%', dash_text):
             final_percent = p_match.group(0)
-            print(f"   📊 Found: {final_percent}")
+            print(f"    📊 Found: {final_percent}")
             
             # --- SCRAPING LOGIC ---
             try:
@@ -175,7 +176,6 @@ def check_attendance_for_user(user):
                         if not subj: continue
                         
                         # 📊 GET COUNTS (Attended / Delivered)
-                        # Usually in the 2nd to last column (cols[-2])
                         count_text = cols[-2].text.strip()
                         per = cols[-1].text.strip()
                         
@@ -187,6 +187,7 @@ def check_attendance_for_user(user):
                             bg = "background-color:#f0f7ff; font-weight:bold; border-top: 2px solid #ddd;"
                             subj = "GRAND TOTAL"
                             text_style = "color:#000;"
+                            grand_total_text = count_text  # 🆕 CAPTURE THE "27/54" HERE
                         
                         if float(per) < 75 and "TOTAL" not in subj: 
                             text_style = "color:#D32F2F; font-weight:bold;"
@@ -222,7 +223,8 @@ def check_attendance_for_user(user):
                 
                 <div style="background:{personality['color']}; padding:25px; text-align:center; color:white;">
                     <h1 style="margin:0; font-size:2.8em; font-weight:bold;">{final_percent}</h1>
-                    <p style="margin:5px 0 0 0; font-size:1.1em; opacity:0.95;">{personality['status']}</p>
+                    <p style="margin:5px 0 0 0; font-size:1.4em; font-weight:bold; opacity:0.9;">{grand_total_text}</p>
+                    <p style="margin:5px 0 0 0; font-size:1.1em; opacity:0.8;">{personality['status']}</p>
                 </div>
 
                 <div style="padding:15px 20px; background:#fafafa; text-align:center; border-bottom:1px solid #eee;">
@@ -244,12 +246,12 @@ def check_attendance_for_user(user):
             send_email_via_api(target_email, subject_line, html_body)
     
     except Exception as e:
-        print(f"   ❌ Login/Scrape Error: {e}")
+        print(f"    ❌ Login/Scrape Error: {e}")
         new_fail = current_fails + 1
-        print(f"   ⚠️ Strike {new_fail}/3")
+        print(f"    ⚠️ Strike {new_fail}/3")
         
         if new_fail >= 3:
-            print("   💀 3 Strikes! Deactivating User.")
+            print("    💀 3 Strikes! Deactivating User.")
             supabase.table("users").update({"fail_count": new_fail, "is_active": False}).eq("college_id", user_id).execute()
             send_email_via_api(target_email, "Bot Deactivated", "<h1>Login Failed 3 Times</h1><p>Please update your password on the website.</p>")
         else:
