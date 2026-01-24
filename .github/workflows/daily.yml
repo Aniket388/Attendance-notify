@@ -11,7 +11,11 @@ on:
     #- cron: '30 11 * * *'
     # ⏰ OFF-PEAK TEST: 6:57 PM IST (1:27 PM UTC)
     # Using a "random" minute (27) to bypass server traffic.
-    - cron: '27 13 * * *'
+    #- cron: '27 13 * * *'
+    # ⏰ FINAL SCHEDULE
+    # 5:52 AM IST = 00:22 AM UTC
+    - cron: '22 0 * * *'
+    
 
 
 
