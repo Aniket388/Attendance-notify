@@ -3,6 +3,7 @@ import re
 import time
 import json
 import base64
+import argparse  # <--- NEW: For reading command line arguments
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from selenium import webdriver
@@ -16,7 +17,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🧟 BOT V4.6: POP-UP PROOF EDITION
+# 🏢 BOT V5.0: ENTERPRISE EDITION (SHARDING READY)
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -74,7 +75,7 @@ def check_attendance_for_user(user):
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument("--window-size=1920,1080")
     
-    # 👇 THIS FIXES THE "In loadYear()" CRASH
+    # 👇 FIXES THE "In loadYear()" CRASH
     chrome_options.add_argument("--disable-popup-blocking")
     chrome_options.set_capability("unhandledPromptBehavior", "accept")
 
@@ -102,7 +103,7 @@ def check_attendance_for_user(user):
             print(f"   ⚠️ Pop-up detected: {alert.text}")
             alert.accept()
         except:
-            pass # No pop-up, continue normally
+            pass 
 
         wait.until(EC.visibility_of_element_located((By.ID, "j_username"))).send_keys(user_id)
         driver.find_element(By.ID, "password-1").send_keys(college_pass)
@@ -171,7 +172,7 @@ def check_attendance_for_user(user):
             <div style="font-family:sans-serif;max-width:500px;margin:auto;border:1px solid #ddd;padding:20px;border-radius:10px;">
                 <h2 style="color:{color};text-align:center;">{alert}: {final_percent}</h2>
                 <table style="width:100%;border-collapse:collapse;">{table_html}</table>
-                <p style="text-align:center;color:#aaa;font-size:10px;margin-top:20px;">NIET Bot V4.6 (Stable)</p>
+                <p style="text-align:center;color:#aaa;font-size:10px;margin-top:20px;">NIET Bot V5.0 (Enterprise)</p>
             </div>
             """
             
@@ -197,15 +198,38 @@ def check_attendance_for_user(user):
         driver.quit()
 
 def main():
-    print("🚀 BOT V4.6 STARTED (POP-UP PROOF)...")
+    # ⚡ NEW: READ ARGUMENTS FROM GITHUB MATRIX
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--offset", type=int, default=0, help="Start row index")
+    parser.add_argument("--limit", type=int, default=1000, help="Number of users to process")
+    args = parser.parse_args()
+
+    print(f"🚀 BOT V5.0 STARTED: Chunk Mode (Offset: {args.offset}, Limit: {args.limit})")
+
     try:
-        # Fetch only ACTIVE users
-        users = supabase.table("users").select("*").eq("is_active", True).execute().data
-        print(f"📋 Processing {len(users)} active users.")
+        # ⚡ PAGINATION LOGIC
+        start = args.offset
+        end = args.offset + args.limit - 1
+        
+        # Fetch only this worker's share of users
+        response = supabase.table("users").select("*")\
+            .eq("is_active", True)\
+            .range(start, end)\
+            .execute()
+            
+        users = response.data
+        
+        if not users:
+            print("   ⚠️ No users found in this chunk. (Worker Idle)")
+            return
+
+        print(f"📋 Processing {len(users)} users in this worker.")
+        
         for user in users:
             check_attendance_for_user(user)
+            
     except Exception as e:
-        print(f"🔥 CRITICAL: {e}")
+        print(f"🔥 CRITICAL ERROR: {e}")
 
 if __name__ == "__main__":
     main()
