@@ -1,5 +1,10 @@
 # 🤖 NIET Attendance Bot (Automated)
 
+Here is the link to register:-
+
+https://attendance-notify.vercel.app/
+
+
 A high-performance, self-healing Python bot that tracks attendance on the NIET Cloud portal.
 Built for scale, it uses parallel processing to handle hundreds of students in minutes.
 
