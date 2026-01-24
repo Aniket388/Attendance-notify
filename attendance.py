@@ -16,7 +16,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🧟 BOT V4: ZOMBIE KILLER EDITION
+# 🧟 BOT V4.5: ZOMBIE KILLER + SPEED HACK
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -66,13 +66,27 @@ def check_attendance_for_user(user):
         print("   ❌ Decryption Failed")
         return
 
-    # Browser Setup
+    # 🚀 BROWSER SETUP (WITH SPEED HACKS)
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument("--window-size=1920,1080")
+    
+    # 👇 BLOCK IMAGES & CSS TO SAVE DATA & TIME
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.default_content_setting_values.notifications": 2,
+        "profile.managed_default_content_settings.stylesheets": 2,
+        "profile.managed_default_content_settings.cookies": 2,
+        "profile.managed_default_content_settings.javascript": 1, 
+        "profile.managed_default_content_settings.plugins": 1,
+        "profile.managed_default_content_settings.popups": 2,
+        "profile.managed_default_content_settings.geolocation": 2,
+        "profile.managed_default_content_settings.media_stream": 2,
+    }
+    chrome_options.add_experimental_option("prefs", prefs)
     
     driver = webdriver.Chrome(options=chrome_options)
     wait = WebDriverWait(driver, 25)
@@ -117,7 +131,6 @@ def check_attendance_for_user(user):
                     if len(cols) >= 4:
                         subj = cols[1].text.strip()
                         if not subj: continue
-                        # cnt = cols[-2].text.strip()
                         per = cols[-1].text.strip()
                         
                         bg = "border-bottom:1px solid #eee;"
@@ -141,7 +154,7 @@ def check_attendance_for_user(user):
             <div style="font-family:sans-serif;max-width:500px;margin:auto;border:1px solid #ddd;padding:20px;border-radius:10px;">
                 <h2 style="color:{color};text-align:center;">{alert}: {final_percent}</h2>
                 <table style="width:100%;border-collapse:collapse;">{table_html}</table>
-                <p style="text-align:center;color:#aaa;font-size:10px;margin-top:20px;">NIET Bot V4 (Zombie Killer)</p>
+                <p style="text-align:center;color:#aaa;font-size:10px;margin-top:20px;">NIET Bot V4.5 (Speed Edition)</p>
             </div>
             """
             
@@ -167,7 +180,7 @@ def check_attendance_for_user(user):
         driver.quit()
 
 def main():
-    print("🚀 BOT V4 STARTED (ZOMBIE KILLER MODE)...")
+    print("🚀 BOT V4.5 STARTED (SPEED MODE)...")
     try:
         # Fetch only ACTIVE users
         users = supabase.table("users").select("*").eq("is_active", True).execute().data
