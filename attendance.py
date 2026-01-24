@@ -16,7 +16,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🧟 BOT V4.5: ZOMBIE KILLER + SPEED HACK
+# 🧟 BOT V4.6: POP-UP PROOF EDITION
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -66,7 +66,7 @@ def check_attendance_for_user(user):
         print("   ❌ Decryption Failed")
         return
 
-    # 🚀 BROWSER SETUP (WITH SPEED HACKS)
+    # 🚀 BROWSER SETUP (WITH POP-UP HANDLING)
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -74,17 +74,15 @@ def check_attendance_for_user(user):
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument("--window-size=1920,1080")
     
-    # 👇 BLOCK IMAGES & CSS TO SAVE DATA & TIME
+    # 👇 THIS FIXES THE "In loadYear()" CRASH
+    chrome_options.add_argument("--disable-popup-blocking")
+    chrome_options.set_capability("unhandledPromptBehavior", "accept")
+
+    # BLOCK IMAGES
     prefs = {
         "profile.managed_default_content_settings.images": 2,
         "profile.default_content_setting_values.notifications": 2,
         "profile.managed_default_content_settings.stylesheets": 2,
-        "profile.managed_default_content_settings.cookies": 2,
-        "profile.managed_default_content_settings.javascript": 1, 
-        "profile.managed_default_content_settings.plugins": 1,
-        "profile.managed_default_content_settings.popups": 2,
-        "profile.managed_default_content_settings.geolocation": 2,
-        "profile.managed_default_content_settings.media_stream": 2,
     }
     chrome_options.add_experimental_option("prefs", prefs)
     
@@ -96,11 +94,30 @@ def check_attendance_for_user(user):
 
     try:
         driver.get(LOGIN_URL)
+        
+        # 🛡️ HANDLE POP-UP ON LOAD
+        try:
+            WebDriverWait(driver, 3).until(EC.alert_is_present())
+            alert = driver.switch_to.alert
+            print(f"   ⚠️ Pop-up detected: {alert.text}")
+            alert.accept()
+        except:
+            pass # No pop-up, continue normally
+
         wait.until(EC.visibility_of_element_located((By.ID, "j_username"))).send_keys(user_id)
         driver.find_element(By.ID, "password-1").send_keys(college_pass)
         driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
         
-        # 2. CHECK SUCCESS (If this passes, Login worked!)
+        # 🛡️ HANDLE POP-UP AFTER LOGIN CLICK
+        try:
+            WebDriverWait(driver, 3).until(EC.alert_is_present())
+            alert = driver.switch_to.alert
+            print(f"   ⚠️ Pop-up detected after login: {alert.text}")
+            alert.accept()
+        except:
+            pass
+
+        # 2. CHECK SUCCESS
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         
         # ✨ RESET FAIL COUNT TO 0 ON SUCCESS
@@ -154,7 +171,7 @@ def check_attendance_for_user(user):
             <div style="font-family:sans-serif;max-width:500px;margin:auto;border:1px solid #ddd;padding:20px;border-radius:10px;">
                 <h2 style="color:{color};text-align:center;">{alert}: {final_percent}</h2>
                 <table style="width:100%;border-collapse:collapse;">{table_html}</table>
-                <p style="text-align:center;color:#aaa;font-size:10px;margin-top:20px;">NIET Bot V4.5 (Speed Edition)</p>
+                <p style="text-align:center;color:#aaa;font-size:10px;margin-top:20px;">NIET Bot V4.6 (Stable)</p>
             </div>
             """
             
@@ -180,7 +197,7 @@ def check_attendance_for_user(user):
         driver.quit()
 
 def main():
-    print("🚀 BOT V4.5 STARTED (SPEED MODE)...")
+    print("🚀 BOT V4.6 STARTED (POP-UP PROOF)...")
     try:
         # Fetch only ACTIVE users
         users = supabase.table("users").select("*").eq("is_active", True).execute().data
