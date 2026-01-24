@@ -167,6 +167,21 @@ HTML_PAGE = """
         a { color: #777; text-decoration: none; border-bottom: 1px dotted #777; }
         a:hover { color: #fff; border-color: #fff; }
 
+        /* 👁️ PASSWORD TOGGLE STYLE */
+        .password-wrapper { position: relative; width: 100%; }
+        .toggle-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #888;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+        }
+        .toggle-icon:hover { color: #fff; }
+
     </style>
 </head>
 <body>
@@ -185,9 +200,19 @@ HTML_PAGE = """
             <div class="input-group">
                 <input type="text" name="college_id" placeholder="College ID (e.g. @niet.co.in)" required autocomplete="off">
             </div>
+            
             <div class="input-group">
-                <input type="password" name="password" placeholder="ERP Password" required>
+                <div class="password-wrapper">
+                    <input type="password" id="passwordInput" name="password" placeholder="ERP Password" required style="padding-right: 45px;">
+                    <span class="toggle-icon" onclick="togglePassword()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    </span>
+                </div>
             </div>
+
             <div class="input-group">
                 <input type="email" name="email" placeholder="Your Personal Email" required autocomplete="off">
             </div>
@@ -202,12 +227,27 @@ HTML_PAGE = """
     </div>
 
     <script>
+        // 🌌 PARALLAX EFFECT
         document.addEventListener('mousemove', (e) => {
             const layer = document.getElementById('bg-layer');
             const x = (window.innerWidth - e.pageX * 2) / 50;
             const y = (window.innerHeight - e.pageY * 2) / 50;
             layer.style.transform = `translateX(${x}px) translateY(${y}px)`;
         });
+
+        // 👁️ PASSWORD TOGGLE LOGIC
+        function togglePassword() {
+            const passwordInput = document.getElementById('passwordInput');
+            const icon = document.querySelector('.toggle-icon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                icon.style.color = '#3b82f6'; // Blue when visible
+            } else {
+                passwordInput.type = 'password';
+                icon.style.color = '#888'; // Grey when hidden
+            }
+        }
     </script>
 
 </body>
