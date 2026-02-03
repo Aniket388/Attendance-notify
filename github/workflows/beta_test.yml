@@ -1,0 +1,28 @@
+name: 🧪 Run Beta Test (Manual)
+
+on:
+  workflow_dispatch: # 👈 This enables the manual button
+
+jobs:
+  beta-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: |
+          pip install selenium webdriver-manager supabase cryptography google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+
+      - name: Run Beta Bot 🧪
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MASTER_KEY: ${{ secrets.MASTER_KEY }}
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+        run: python attendance_beta.py
