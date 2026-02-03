@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🎭 BOT V6.1: BETA EDITION (V6 Core + Yesterday's Report)
+# 🎭 BOT V6.2: BETA EDITION (Smart Date Scanning)
 # ====================================================
 
 # 🔒 SAFETY LOCK: Only runs for YOU
@@ -83,7 +83,7 @@ def check_attendance_for_user(user):
         print("    ❌ Decryption Failed")
         return
 
-    # BROWSER SETUP (Your Original Config)
+    # BROWSER SETUP
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -105,7 +105,7 @@ def check_attendance_for_user(user):
     
     final_percent = "N/A"
     table_html = ""
-    yesterday_updates = [] # 🆕 New Storage
+    yesterday_updates = []
 
     try:
         driver.get(LOGIN_URL)
@@ -135,7 +135,7 @@ def check_attendance_for_user(user):
             final_percent = p_match.group(0)
             print(f"    📊 Found: {final_percent}")
             
-            # --- SCRAPING MAIN TABLE (Your Logic) ---
+            # --- SCRAPING MAIN TABLE ---
             try:
                 xpath_query = f"//*[contains(text(),'{final_percent}')]"
                 target = driver.find_element(By.XPATH, xpath_query)
@@ -146,7 +146,6 @@ def check_attendance_for_user(user):
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
                 time.sleep(2)
                 
-                # 🆕 1. INITIALIZE COUNTERS
                 total_attended = 0
                 total_delivered = 0
 
@@ -165,14 +164,12 @@ def check_attendance_for_user(user):
                         count_style = "color:#666; font-size: 0.85em;"
                         
                         is_total_row = False
-
                         if "Total" in cols[0].text: 
                             bg = "background-color:#f0f7ff; font-weight:bold; border-top: 2px solid #ddd;"
                             subj = "GRAND TOTAL"
                             text_style = "color:#000;"
                             is_total_row = True
                         
-                        # Math Logic
                         if not is_total_row:
                             try:
                                 parts = count_text.split('/')
@@ -197,19 +194,17 @@ def check_attendance_for_user(user):
             except: pass
 
             # ============================================================
-            # 🆕 PART 2: YESTERDAY'S REPORT (Added Feature)
+            # 🆕 PART 2: YESTERDAY'S REPORT (FIXED LOGIC)
             # ============================================================
             print("    🕵️ Checking Yesterday's Attendance...")
             try:
-                # Re-find subject rows to click into them
                 subject_rows = driver.find_elements(By.XPATH, "//table[.//th[text()='Course Name']]//tr[td]")
                 
-                # LIMIT TO FIRST 4 SUBJECTS to prevent Timeout/Crash
-                scan_limit = min(4, len(subject_rows))
+                # 🚀 INCREASED LIMIT: Check ALL subjects
+                scan_limit = len(subject_rows)
                 
                 for i in range(scan_limit):
                     try:
-                        # Refresh to avoid Stale Element
                         rows = driver.find_elements(By.XPATH, "//table[.//th[text()='Course Name']]//tr[td]")
                         if i >= len(rows): break
                         
@@ -217,44 +212,54 @@ def check_attendance_for_user(user):
                         if len(cols) < 3: continue
                         subj_name = cols[1].text.strip()
                         
-                        # Find Clickable Link
                         try: count_link = cols[2].find_element(By.TAG_NAME, "a")
                         except: continue 
 
-                        # Click
                         driver.execute_script("arguments[0].click();", count_link)
-                        time.sleep(1) # Short wait
+                        time.sleep(1) 
                         
-                        # Find Dates
                         details_rows = driver.find_elements(By.XPATH, "//table[.//th[text()='Date']]//tr[td]")
                         
-                        # Check Latest Entry
+                        # 🛠️ FIXED: Scan BACKWARDS through the list
+                        # This handles cases where "Today" is added after "Yesterday"
                         if details_rows:
-                            last_row_cols = details_rows[-1].find_elements(By.TAG_NAME, "td")
-                            if len(last_row_cols) >= 5:
-                                date_text = last_row_cols[1].text.strip()
-                                status = last_row_cols[4].text.strip()
-                                
-                                # Logic: Is it yesterday?
-                                entry_date = datetime.strptime(date_text, "%b %d, %Y").date()
-                                yesterday = datetime.now().date() - timedelta(days=1)
-                                
-                                if entry_date == yesterday:
-                                    icon = "✅" if status == "P" else "❌"
-                                    yesterday_updates.append(f"<strong>{subj_name}</strong>: {icon} {status}")
+                            for detail in reversed(details_rows):
+                                d_cols = detail.find_elements(By.TAG_NAME, "td")
+                                if len(d_cols) >= 5:
+                                    date_text = d_cols[1].text.strip()
+                                    status = d_cols[4].text.strip()
+                                    
+                                    try:
+                                        entry_date = datetime.strptime(date_text, "%b %d, %Y").date()
+                                        today = datetime.now().date()
+                                        yesterday = today - timedelta(days=1)
+                                        
+                                        # If it's Today, ignore and keep looking back
+                                        if entry_date == today:
+                                            continue
+                                        
+                                        # If it's Yesterday, BINGO!
+                                        if entry_date == yesterday:
+                                            icon = "✅" if status == "P" else "❌"
+                                            yesterday_updates.append(f"<strong>{subj_name}</strong>: {icon} {status}")
+                                            break # Found it, move to next subject
+                                        
+                                        # If it's older than Yesterday, stop looking
+                                        if entry_date < yesterday:
+                                            break
+                                    except: continue
 
-                        # Go Back
                         driver.back()
                         time.sleep(1)
                         
                     except Exception as e:
-                        driver.get(LOGIN_URL) # Reset if lost
+                        driver.get(LOGIN_URL) 
                         continue
             except Exception as e:
                 print(f"    ⚠️ Deep Dive Error (Skipping): {e}")
 
             # ============================================================
-            # 🆕 PART 3: BUILD EMAIL (V6 Style + New Section)
+            # 🆕 PART 3: BUILD EMAIL
             # ============================================================
             try:
                 val = float(re.search(r'\d+\.?\d*', final_percent).group())
@@ -265,7 +270,6 @@ def check_attendance_for_user(user):
             subject_line = f"📅 Daily: {final_percent}"
             grand_total_text = f"{total_attended} / {total_delivered}"
 
-            # New HTML Section
             y_html = ""
             if yesterday_updates:
                 items = "".join([f"<li style='margin-bottom:5px;'>{u}</li>" for u in yesterday_updates])
@@ -297,7 +301,7 @@ def check_attendance_for_user(user):
                 </div>
 
                 <div style="background:#fafafa; padding:15px; text-align:center; font-size:0.75em; color:#999;">
-                    NIET Beta V6.1 • <a href="https://attendance-notify.vercel.app/" style="color:#999; text-decoration:underline;">Update Settings</a>
+                    NIET Beta V6.2 • <a href="https://attendance-notify.vercel.app/" style="color:#999; text-decoration:underline;">Update Settings</a>
                 </div>
             </div>
             """
@@ -306,19 +310,15 @@ def check_attendance_for_user(user):
     
     except Exception as e:
         print(f"    ❌ Login/Scrape Error: {e}")
-        # Not adding 'Fail Count' logic for beta to avoid locking account during tests
 
     finally:
         driver.quit()
 
 def main():
-    print(f"🚀 BOT V6.1 BETA STARTED")
-
+    print(f"🚀 BOT V6.2 BETA STARTED")
     try:
         response = supabase.table("users").select("*").eq("is_active", True).execute()
         all_users = response.data
-        
-        # 🛡️ SAFETY LOCK: ONLY YOU
         my_users = [u for u in all_users if u['college_id'] in BETA_TESTERS]
 
         if not my_users:
@@ -326,7 +326,6 @@ def main():
             return
 
         print(f"🧪 Running ONLY for: {BETA_TESTERS}")
-        
         for user in my_users:
             check_attendance_for_user(user)
             
