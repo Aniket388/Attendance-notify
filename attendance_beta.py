@@ -126,10 +126,13 @@ def check_attendance_for_user(user):
         # Wait for "Attendance" text (Basic check)
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         log("    ✨ Login Success!")
-        with open("page_dump.html", "w", encoding="utf-8") as f:
-    f.write(driver.page_source)
 
-log("📄 Page source dumped after login")
+        with open("page_dump.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
+
+        log("📄 Page source dumped after login")
+
+
 
 
         # 🛠️ FORCE TRIGGER: CLICK PERCENTAGE
