@@ -26,3 +26,11 @@ jobs:
           MASTER_KEY: ${{ secrets.MASTER_KEY }}
           GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
         run: python attendance_beta.py
+
+      # 🔍 THIS IS THE CRITICAL STEP
+      - name: Upload page dump (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: page-dump
+          path: page_dump.html
