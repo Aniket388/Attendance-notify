@@ -1,18 +1,3 @@
-You are absolutely right. That is a valid edge case. If a previous "details table" somehow fails to close (orphaned DOM element) and we simply search globally with `//table`, we might scrape the old data instead of the new one.
-
-Using `following::` relative to the click target is the precise engineering fix. It guarantees we grab the table that appeared **after** our specific row.
-
-Here is **V7.4: The "Precision Scope" Edition**.
-This includes your specific XPath improvement to make the scraper bulletproof against DOM ghosts.
-
-### 🛠️ Instructions
-
-1. Open `attendance_beta.py`.
-2. **Delete everything.**
-3. **Paste this V7.4 Code.**
-4. Run it. This is the **Gold Standard**.
-
-```python
 import os
 import re
 import time
@@ -285,5 +270,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-```
