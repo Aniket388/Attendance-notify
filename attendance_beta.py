@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🛡️ BOT V7.4: PRECISION SCOPE EDITION (Final Polish)
+# 💎 BOT V7.5: GOLD STANDARD EDITION (Labs + Scoped)
 # ====================================================
 
 # 🔒 SAFETY LOCK
@@ -80,7 +80,7 @@ def send_email(target_email, subject, html_content):
 def check_attendance_for_user(user):
     user_id = user['college_id']
     target_email = user['target_email']
-    log(f"\n🔄 Beta V7.4 Processing: {user_id}")
+    log(f"\n🔄 Beta V7.5 Processing: {user_id}")
     
     try:
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
@@ -176,18 +176,18 @@ def check_attendance_for_user(user):
                 
                 log(f"       [{i+1}/{total_subjects}] Clicked: {subj_name}")
 
-                # WAIT FOR TABLE
+                # WAIT FOR TABLE (SCOPED)
                 try:
-                    # Wait for ANY detail table to be present
-                    wait.until(EC.presence_of_element_located((By.XPATH, "//table[.//th[contains(., 'Date')]]")))
+                    # 🛠️ FIX 1: SCOPED WAIT (Relative to click target)
+                    # Waits until a 'Date' table appears specifically after the clicked row
+                    wait.until(lambda d: len(click_target.find_elements(By.XPATH, "./following::table[.//th[contains(., 'Date')]]")) > 0)
                     
-                    # 🛡️ PRECISION FIX: Find table RELATIVE to the click
-                    # We search specifically for the table that follows our clicked row
                     details_table = click_target.find_element(By.XPATH, "./following::table[.//th[contains(., 'Date')]][1]")
-                    
                     details_rows = details_table.find_elements(By.TAG_NAME, "tr")
                     
-                    # CHECK YESTERDAY (Backwards)
+                    # CHECK YESTERDAY (Handle Labs/Multiple Sessions)
+                    found_statuses = []
+                    
                     for d_row in reversed(details_rows):
                         d_cols = d_row.find_elements(By.TAG_NAME, "td")
                         if len(d_cols) < 5: continue 
@@ -197,15 +197,28 @@ def check_attendance_for_user(user):
                         
                         try:
                             entry_date = datetime.strptime(date_text, "%b %d, %Y").date()
+                            
+                            # 🛠️ FIX 2: LAB LOGIC (Don't break on first match)
                             if entry_date == today: continue
+                            
                             if entry_date == yesterday:
-                                icon = "✅" if status == "P" else "❌"
-                                yesterday_updates.append(f"<strong>{subj_name}</strong>: {icon} {status}")
-                                log(f"          🎯 FOUND: {status}")
-                                break 
-                            if entry_date < yesterday: break 
+                                found_statuses.append(status)
+                            
+                            elif entry_date < yesterday: 
+                                break # Stop only when we hit older dates
                         except: continue
+                    
+                    # Add all found sessions (Theory + Labs)
+                    if found_statuses:
+                        formatted_statuses = []
+                        for s in found_statuses:
+                            icon = "✅" if s == "P" else "❌"
+                            formatted_statuses.append(f"{icon} {s}")
                         
+                        status_str = ", ".join(formatted_statuses)
+                        yesterday_updates.append(f"<strong>{subj_name}</strong>: {status_str}")
+                        log(f"          🎯 FOUND: {status_str}")
+
                 except TimeoutException:
                     log("          ⚠️ No details table appeared (Timeout)")
                 except NoSuchElementException:
@@ -251,7 +264,7 @@ def check_attendance_for_user(user):
         driver.quit()
 
 def main():
-    log(f"🚀 BOT V7.4 PRECISION EDITION STARTED")
+    log(f"🚀 BOT V7.5 GOLD STANDARD STARTED")
     try:
         response = supabase.table("users").select("*").eq("is_active", True).execute()
         all_users = response.data
