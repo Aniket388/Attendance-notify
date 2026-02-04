@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 💎 BOT V7.5: GOLD STANDARD EDITION (Labs + Scoped)
+# 🛡️ BOT V7.9: SCOPED & STABLE EDITION
 # ====================================================
 
 # 🔒 SAFETY LOCK
@@ -80,7 +80,7 @@ def send_email(target_email, subject, html_content):
 def check_attendance_for_user(user):
     user_id = user['college_id']
     target_email = user['target_email']
-    log(f"\n🔄 Beta V7.5 Processing: {user_id}")
+    log(f"\n🔄 Beta V7.9 Processing: {user_id}")
     
     try:
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
@@ -126,66 +126,82 @@ def check_attendance_for_user(user):
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         log("    ✨ Login Success!")
 
-        # --- 1. SCRAPE MAIN TABLE FIRST ---
+        # --- PREP SUMMARY DATA ---
         dash_text = driver.find_element(By.TAG_NAME, "body").text
-        
-        main_rows = driver.find_elements(By.XPATH, "//table[.//th[contains(., 'Course Name')]]//tr[td]")
-        total_subjects = len(main_rows)
-        log(f"    📊 Found {total_subjects} subjects in main table.")
-
         if p_match := re.search(r'(\d+\.\d+)%', dash_text):
             final_percent_str = p_match.group(0)
             final_percent_val = float(p_match.group(1))
 
-            for row in main_rows:
+        # --- 1. SCOPED ROW COLLECTION ---
+        # We need to know the total count of valid subjects first
+        total_subjects = 0
+        try:
+            # 🛠️ SCOPE: ONLY the Main Attendance Table
+            attendance_table = driver.find_element(By.XPATH, "//table[.//th[contains(., 'Attendance Count')]]")
+            raw_rows = attendance_table.find_elements(By.XPATH, ".//tr[td]")
+            
+            # Count how many are actual subjects (have fraction in col 2)
+            for row in raw_rows:
                 cols = row.find_elements(By.TAG_NAME, "td")
-                if len(cols) >= 4:
-                    subj = cols[1].text.strip()
-                    if not subj: continue
-                    count_text = cols[-2].text.strip()
-                    per = cols[-1].text.strip()
-                    
-                    bg = "border-bottom:1px solid #eee;"
-                    if "Total" in cols[0].text: 
-                        bg = "background-color:#f0f7ff; font-weight:bold;"
-                        subj = "GRAND TOTAL"
-                    
-                    table_html += f"<tr style='{bg}'><td style='padding:8px;'>{subj}</td><td style='text-align:right;'>{per}%<br><span style='color:#666;font-size:0.8em'>{count_text}</span></td></tr>"
+                if len(cols) >= 3 and "/" in cols[2].text:
+                    total_subjects += 1
+            log(f"    📊 Found {total_subjects} Valid Subject Rows.")
+        except Exception as e:
+            log(f"    ⚠️ Initial Scoping Failed: {e}")
+            return
 
-        # --- 2. DEEP DIVE: IN-PLACE INJECTION STRATEGY ---
-        log("    🕵️ Deep Dive: Starting In-Place Scrape...")
+        # --- 2. DEEP DIVE: STABLE ITERATION ---
+        log("    🕵️ Deep Dive: Starting Stable Scrape...")
         
         for i in range(total_subjects):
             try:
-                # Re-fetch Main Table Rows (Fresh DOM)
-                current_rows = driver.find_elements(By.XPATH, "//table[.//th[contains(., 'Course Name')]]//tr[td]")
-                if i >= len(current_rows): break
+                # A. RE-FETCH TABLE & ROWS (Survives DOM Mutation)
+                attendance_table = driver.find_element(By.XPATH, "//table[.//th[contains(., 'Attendance Count')]]")
+                raw_rows = attendance_table.find_elements(By.XPATH, ".//tr[td]")
                 
-                row = current_rows[i]
+                # B. RE-FILTER to find the ith Subject Row
+                subject_rows = []
+                for r in raw_rows:
+                    cols = r.find_elements(By.TAG_NAME, "td")
+                    if len(cols) >= 3 and "/" in cols[2].text:
+                        subject_rows.append(r)
+                
+                if i >= len(subject_rows): break # Safety break
+                
+                row = subject_rows[i]
                 cols = row.find_elements(By.TAG_NAME, "td")
                 
-                if len(cols) < 3: continue
                 subj_name = cols[1].text.strip()
-                if "Total" in cols[0].text: continue
+                count_text = cols[2].text.strip()
+                per = cols[-1].text.strip()
 
-                # CLICK TARGET
-                click_target = cols[2] 
+                # Save for Email Table (while we are here)
+                bg = "border-bottom:1px solid #eee;"
+                table_html += f"<tr style='{bg}'><td style='padding:8px;'>{subj_name}</td><td style='text-align:right;'>{per}%<br><span style='color:#666;font-size:0.8em'>{count_text}</span></td></tr>"
+
+                # C. CLICK TARGET (The Anchor Tag)
+                try:
+                    anchor = cols[2].find_element(By.TAG_NAME, "a")
+                    click_target = anchor
+                except NoSuchElementException:
+                    click_target = cols[2] # Fallback
+
                 driver.execute_script("arguments[0].scrollIntoView(true);", click_target)
                 time.sleep(0.5)
                 driver.execute_script("arguments[0].click();", click_target)
                 
-                log(f"       [{i+1}/{total_subjects}] Clicked: {subj_name}")
+                log(f"       [{i+1}/{total_subjects}] Scanned: {subj_name}")
 
-                # WAIT FOR TABLE (SCOPED)
+                # D. WAIT & SCRAPE (Robust Relative Wait)
                 try:
-                    # 🛠️ FIX 1: SCOPED WAIT (Relative to click target)
-                    # Waits until a 'Date' table appears specifically after the clicked row
-                    wait.until(lambda d: len(click_target.find_elements(By.XPATH, "./following::table[.//th[contains(., 'Date')]]")) > 0)
+                    # Wait for ANY date table
+                    wait.until(EC.presence_of_element_located((By.XPATH, "//table[.//th[contains(., 'Date')]]")))
                     
-                    details_table = click_target.find_element(By.XPATH, "./following::table[.//th[contains(., 'Date')]][1]")
+                    # Find specific table relative to anchor
+                    xpath_to_table = f"./following::table[.//th[contains(., 'Date')]][1]"
+                    details_table = click_target.find_element(By.XPATH, xpath_to_table)
                     details_rows = details_table.find_elements(By.TAG_NAME, "tr")
                     
-                    # CHECK YESTERDAY (Handle Labs/Multiple Sessions)
                     found_statuses = []
                     
                     for d_row in reversed(details_rows):
@@ -197,32 +213,20 @@ def check_attendance_for_user(user):
                         
                         try:
                             entry_date = datetime.strptime(date_text, "%b %d, %Y").date()
-                            
-                            # 🛠️ FIX 2: LAB LOGIC (Don't break on first match)
                             if entry_date == today: continue
-                            
                             if entry_date == yesterday:
                                 found_statuses.append(status)
-                            
                             elif entry_date < yesterday: 
-                                break # Stop only when we hit older dates
+                                break 
                         except: continue
                     
-                    # Add all found sessions (Theory + Labs)
                     if found_statuses:
-                        formatted_statuses = []
-                        for s in found_statuses:
-                            icon = "✅" if s == "P" else "❌"
-                            formatted_statuses.append(f"{icon} {s}")
-                        
-                        status_str = ", ".join(formatted_statuses)
-                        yesterday_updates.append(f"<strong>{subj_name}</strong>: {status_str}")
-                        log(f"          🎯 FOUND: {status_str}")
+                        formatted = ", ".join([f"{'✅' if s=='P' else '❌'} {s}" for s in found_statuses])
+                        yesterday_updates.append(f"<strong>{subj_name}</strong>: {formatted}")
+                        log(f"          🎯 FOUND: {formatted}")
 
                 except TimeoutException:
                     log("          ⚠️ No details table appeared (Timeout)")
-                except NoSuchElementException:
-                    log("          ⚠️ Details table not found relative to row")
                 
             except Exception as e:
                 log(f"       ⚠️ Error on subject {i}: {e}")
@@ -264,7 +268,7 @@ def check_attendance_for_user(user):
         driver.quit()
 
 def main():
-    log(f"🚀 BOT V7.5 GOLD STANDARD STARTED")
+    log(f"🚀 BOT V7.9 STABLE SCOPE STARTED")
     try:
         response = supabase.table("users").select("*").eq("is_active", True).execute()
         all_users = response.data
