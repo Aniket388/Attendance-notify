@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🏆 BOT V8.2: VERIFIED REPORT EDITION (No Ghost Rows)
+# 🛡️ BOT V8.4: FORCE-TRIGGER EDITION
 # ====================================================
 
 # 🔒 SAFETY LOCK
@@ -80,7 +80,7 @@ def send_email(target_email, subject, html_content):
 def check_attendance_for_user(user):
     user_id = user['college_id']
     target_email = user['target_email']
-    log(f"\n🔄 V8.2 Processing: {user_id}")
+    log(f"\n🔄 V8.4 Processing: {user_id}")
     
     try:
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
@@ -101,11 +101,11 @@ def check_attendance_for_user(user):
     chrome_options.page_load_strategy = 'eager' 
     
     driver = webdriver.Chrome(options=chrome_options)
-    wait = WebDriverWait(driver, 20)
+    wait = WebDriverWait(driver, 25) # Slightly longer wait
     
     final_percent_str = "N/A"
     final_percent_val = 0.0
-    verified_subjects = [] # Store verified data here
+    verified_subjects = [] 
     yesterday_updates = []
 
     try:
@@ -123,39 +123,53 @@ def check_attendance_for_user(user):
         try: driver.switch_to.alert.accept()
         except: pass
 
+        # Wait for "Attendance" text (Basic check)
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         log("    ✨ Login Success!")
 
-        # 🛠️ SMART REFRESH
+        # 🛠️ FORCE TRIGGER: CLICK PERCENTAGE
         try:
-            refresh_btn = driver.find_element(By.XPATH, "//button[contains(., 'Refresh')]")
-            driver.execute_script("arguments[0].click();", refresh_btn)
-            log("    🔄 Forced Refresh Triggered. Waiting for table...")
+            # Find the element containing the % (e.g. "52.17%")
+            percent_el = driver.find_element(By.XPATH, "//*[contains(text(), '%')]")
+            driver.execute_script("arguments[0].click();", percent_el)
+            log("    🧲 Attendance panel triggered via percentage click.")
+            
+            # 🛠️ MANDATORY WAIT FOR TABLE EXPANSION
             wait.until(EC.presence_of_element_located((By.XPATH, "//table[.//th[contains(., 'Attendance Count')]]")))
-            time.sleep(1) 
-            log("    ✅ Table reloaded successfully.")
-        except:
-            log("    ℹ️ Refresh failed or skipped.")
+            time.sleep(1) # Stability buffer
+            log("    ✅ Table loaded successfully.")
+            
+        except Exception as e:
+            log(f"    ⚠️ Trigger Error: {e}")
+            # We continue, just in case the table was already there
+
+        # --- DISCOVERY PHASE ---
+        total_subjects = 0
+        try:
+            # Re-locate table to be safe
+            attendance_table = driver.find_element(By.XPATH, "//table[.//th[contains(., 'Attendance Count')]]")
+            raw_rows = attendance_table.find_elements(By.XPATH, ".//tr[td]")
+            
+            for row in raw_rows:
+                cols = row.find_elements(By.TAG_NAME, "td")
+                if len(cols) >= 3 and "/" in cols[2].text:
+                    total_subjects += 1
+            log(f"    📊 Found {total_subjects} potential subjects.")
+            
+            if total_subjects == 0:
+                log("    ❌ Zero subjects found. Dumping page text for debug.")
+                log(f"    📄 PAGE DUMP: {driver.find_element(By.TAG_NAME, 'body').text[:300]}")
+                return
+
+        except NoSuchElementException:
+            log("    ❌ Critical: Attendance Table NOT found.")
+            return
 
         # --- PREP SUMMARY DATA ---
         dash_text = driver.find_element(By.TAG_NAME, "body").text
         if p_match := re.search(r'(\d+\.\d+)%', dash_text):
             final_percent_str = p_match.group(0)
             final_percent_val = float(p_match.group(1))
-
-        # --- DISCOVERY PHASE (Count potential subjects) ---
-        total_subjects = 0
-        try:
-            attendance_table = driver.find_element(By.XPATH, "//table[.//th[contains(., 'Attendance Count')]]")
-            raw_rows = attendance_table.find_elements(By.XPATH, ".//tr[td]")
-            for row in raw_rows:
-                cols = row.find_elements(By.TAG_NAME, "td")
-                if len(cols) >= 3 and "/" in cols[2].text:
-                    total_subjects += 1
-            log(f"    📊 Found {total_subjects} potential subjects.")
-        except:
-            log("    ⚠️ Table discovery failed.")
-            return
 
         # --- DEEP DIVE (Verify & Collect) ---
         log("    🕵️ Starting Verified Scrape...")
@@ -178,7 +192,7 @@ def check_attendance_for_user(user):
                 row = subject_rows[i]
                 cols = row.find_elements(By.TAG_NAME, "td")
                 
-                # CAPTURE DATA NOW (While row is valid)
+                # CAPTURE DATA NOW
                 subj_name = cols[1].text.strip()
                 count_text = cols[2].text.strip()
                 per = cols[-1].text.strip()
@@ -196,7 +210,7 @@ def check_attendance_for_user(user):
                 
                 log(f"       [{i+1}/{total_subjects}] Scanned: {subj_name}")
 
-                # ✅ ADD TO VERIFIED LIST (Because click succeeded)
+                # ✅ ADD TO VERIFIED LIST
                 verified_subjects.append({
                     "name": subj_name,
                     "count": count_text,
@@ -205,8 +219,12 @@ def check_attendance_for_user(user):
 
                 # D. WAIT & SCRAPE DETIALS
                 try:
-                    wait.until(EC.presence_of_element_located((By.XPATH, "//table[.//th[contains(., 'Date')]]")))
+                    # Wait specifically for table relative to this row
                     xpath_to_table = f"./following::table[.//th[contains(., 'Date')]][1]"
+                    
+                    # Smart wait: wait for element to exist relative to click_target
+                    wait.until(lambda d: len(click_target.find_elements(By.XPATH, xpath_to_table)) > 0)
+                    
                     details_table = click_target.find_element(By.XPATH, xpath_to_table)
                     details_rows = details_table.find_elements(By.TAG_NAME, "tr")
                     
@@ -240,7 +258,7 @@ def check_attendance_for_user(user):
                 log(f"       ⚠️ Error on subject {i}: {e}")
                 continue
 
-        # --- BUILD EMAIL FROM VERIFIED DATA ONLY ---
+        # --- BUILD EMAIL ---
         table_html = ""
         for subj in verified_subjects:
             bg = "border-bottom:1px solid #eee;"
@@ -281,7 +299,7 @@ def check_attendance_for_user(user):
         driver.quit()
 
 def main():
-    log(f"🚀 BOT V8.2 VERIFIED REPORT STARTED")
+    log(f"🚀 BOT V8.4 FORCE TRIGGER STARTED")
     try:
         response = supabase.table("users").select("*").eq("is_active", True).execute()
         all_users = response.data
