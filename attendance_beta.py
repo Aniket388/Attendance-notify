@@ -1,3 +1,23 @@
+The log `✅ Modal captured` followed by `❌ Scoping Error` proves that your bot found **A** modal (likely a loading spinner or a hidden popup), but it was the **WRONG** container. The Attendance Table was not inside it.
+
+Your screenshot confirms the "Current Status" table appears **inline** (below the red box), not in a popup modal. I was wrong to assume it was a modal.
+
+We are fixing this by anchoring to the **Text You Can See**.
+
+### 🎯 V9.6: The "Visual Anchor" Edition
+
+1. **Trigger:** Click `#attendencePer`.
+2. **Anchor:** Wait for the text **"Current Status"** to appear on the screen.
+3. **Target:** Find the table strictly associated with that text.
+
+### 🛠️ Instructions
+
+1. Open `attendance_beta.py`.
+2. **Delete everything.**
+3. **Paste V9.6.**
+4. Run it.
+
+```python
 import os
 import re
 import time
@@ -19,7 +39,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 💎 BOT V9.5: CLEAN CYCLE EDITION (Final Logic)
+# 🎯 BOT V9.6: VISUAL ANCHOR EDITION
 # ====================================================
 
 # 🔒 SAFETY LOCK
@@ -80,7 +100,7 @@ def send_email(target_email, subject, html_content):
 def check_attendance_for_user(user):
     user_id = user['college_id']
     target_email = user['target_email']
-    log(f"\n🔄 V9.5 Processing: {user_id}")
+    log(f"\n🔄 V9.6 Processing: {user_id}")
     
     try:
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
@@ -126,13 +146,12 @@ def check_attendance_for_user(user):
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         log("    ✨ Login Success!")
 
-        # --- STEP 1: TRIGGER THE MODAL ---
+        # --- STEP 1: TRIGGER & INSTANT PERCENTAGE ---
         try:
             log("    🎯 Clicking Trigger ID: attendencePer")
             trigger = driver.find_element(By.ID, "attendencePer")
             
-            # 🛠️ FIX 3: INSTANT SUMMARY EXTRACTION
-            # Grab percentage directly from the source ID before we click anything
+            # Capture percent instantly
             final_percent_str = trigger.text.strip()
             final_percent_val = float(final_percent_str.replace("%", "").strip())
             
@@ -141,58 +160,61 @@ def check_attendance_for_user(user):
             log(f"    ❌ Trigger Failed: {e}")
             return
 
-        # --- STEP 2: CAPTURE THE MODAL ---
-        modal = None
+        # --- STEP 2: WAIT FOR 'Current Status' TEXT (The Real Anchor) ---
+        attendance_table = None
         try:
-            log("    ⏳ Waiting for Attendance Modal...")
-            # Wait for modal container
-            modal_xpath = "//div[contains(@class,'modal') and (contains(@class,'in') or contains(@class,'show') or contains(@style,'display: block'))]"
-            modal = wait.until(EC.visibility_of_element_located((By.XPATH, modal_xpath)))
-            log("    ✅ Modal captured.")
+            log("    ⏳ Waiting for 'Current Status' section...")
+            # We wait for the HEADER "Current Status" to appear.
+            # This confirms the injection finished.
+            header = wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Current Status')]")))
+            log("    ✅ 'Current Status' Header Found.")
+            
+            # --- STEP 3: FIND THE TABLE NEARBY ---
+            # We look for a table that contains rows with '%' symbols (Subject rows)
+            # This avoids grabbing the TimeTable by mistake.
+            attendance_table = driver.find_element(By.XPATH, "//table[.//td[contains(text(), '%')]]")
+            
         except TimeoutException:
-            log("    ❌ Critical: Modal container never appeared.")
+            log("    ❌ Critical: 'Current Status' or Subject Table never appeared.")
+            return
+        except NoSuchElementException:
+            log("    ❌ Critical: Found header but NO table with percentages.")
             return
 
-        # --- STEP 3: SCOPE & COUNT ---
+        # --- STEP 4: SCOPE & COUNT ---
         try:
-            attendance_table = modal.find_element(By.XPATH, ".//table[contains(@class,'table')]")
             raw_rows = attendance_table.find_elements(By.XPATH, ".//tr[td]")
             
             total_subjects = 0
             for row in raw_rows:
                 cols = row.find_elements(By.TAG_NAME, "td")
-                if len(cols) >= 3 and "/" in cols[2].text:
+                if len(cols) >= 3 and "%" in cols[-1].text: # Percent is usually last col
                     total_subjects += 1
                     
-            log(f"    📊 Rows found inside modal: {total_subjects}")
+            log(f"    📊 Rows found in table: {total_subjects}")
             
             if total_subjects == 0:
-                log("    ⚠️ Modal opened but no subjects found. Exiting.")
+                log("    ⚠️ Table found but empty.")
                 return
 
         except Exception as e:
             log(f"    ❌ Scoping Error: {e}")
             return
 
-        # --- STEP 4: DEEP DIVE (Verified Scrape + Clean Cycle) ---
+        # --- STEP 5: DEEP DIVE (Verified Scrape) ---
         log("    🕵️ Starting Verified Scrape...")
         
         for i in range(total_subjects):
             try:
-                # BOOTSTRAP GUARD
-                if not modal.is_displayed():
-                    log("    ⚠️ Modal closed unexpectedly! Stopping.")
-                    break
-
-                # A. RE-FETCH SCOPED
-                attendance_table = modal.find_element(By.XPATH, ".//table[contains(@class,'table')]")
+                # A. RE-FETCH TABLE (Survives DOM Mutation)
+                attendance_table = driver.find_element(By.XPATH, "//table[.//td[contains(text(), '%')]]")
                 raw_rows = attendance_table.find_elements(By.XPATH, ".//tr[td]")
                 
                 # B. RE-FILTER
                 subject_rows = []
                 for r in raw_rows:
                     cols = r.find_elements(By.TAG_NAME, "td")
-                    if len(cols) >= 3 and "/" in cols[2].text:
+                    if len(cols) >= 3 and "%" in cols[-1].text:
                         subject_rows.append(r)
                 
                 if i >= len(subject_rows): break 
@@ -205,7 +227,7 @@ def check_attendance_for_user(user):
                 count_text = cols[2].text.strip()
                 per = cols[-1].text.strip()
 
-                # C. CLICK TARGET (OPEN ACCORDION)
+                # C. CLICK TARGET
                 try:
                     anchor = cols[2].find_element(By.TAG_NAME, "a")
                     click_target = anchor
@@ -225,10 +247,9 @@ def check_attendance_for_user(user):
                     "percent": per
                 })
 
-                # D. WAIT FOR DATA TABLE (FIX 1: Robust Finder)
+                # D. WAIT & SCRAPE DETIALS
                 try:
-                    # We wait for ANY Date table to become present.
-                    # Since we just clicked one subject, this is the only one appearing.
+                    # Wait for details table to appear
                     details_table = wait.until(
                         EC.presence_of_element_located(
                             (By.XPATH, "//table[.//th[contains(., 'Date')]]")
@@ -236,7 +257,6 @@ def check_attendance_for_user(user):
                     )
                     
                     details_rows = details_table.find_elements(By.TAG_NAME, "tr")
-                    
                     found_statuses = []
                     
                     for d_row in reversed(details_rows):
@@ -263,12 +283,10 @@ def check_attendance_for_user(user):
                 except TimeoutException:
                     log("          ⚠️ No details table appeared (Timeout)")
                 
-                # E. CLEAN UP (FIX 2: Collapse Row)
-                # Click the same target again to close the accordion
-                # This resets the DOM state for the next iteration
+                # E. CLEAN UP (Collapse)
                 try:
                     driver.execute_script("arguments[0].click();", click_target)
-                    time.sleep(0.3) # Short breath for animation
+                    time.sleep(0.3) 
                 except: pass
 
             except Exception as e:
@@ -316,7 +334,7 @@ def check_attendance_for_user(user):
         driver.quit()
 
 def main():
-    log(f"🚀 BOT V9.5 CLEAN CYCLE STARTED")
+    log(f"🚀 BOT V9.6 VISUAL ANCHOR STARTED")
     try:
         response = supabase.table("users").select("*").eq("is_active", True).execute()
         all_users = response.data
@@ -335,3 +353,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+```
