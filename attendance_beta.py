@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🛡️ BOT V7.9: SCOPED & STABLE EDITION
+# 🏆 BOT V8.2: VERIFIED REPORT EDITION (No Ghost Rows)
 # ====================================================
 
 # 🔒 SAFETY LOCK
@@ -80,7 +80,7 @@ def send_email(target_email, subject, html_content):
 def check_attendance_for_user(user):
     user_id = user['college_id']
     target_email = user['target_email']
-    log(f"\n🔄 Beta V7.9 Processing: {user_id}")
+    log(f"\n🔄 V8.2 Processing: {user_id}")
     
     try:
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
@@ -105,7 +105,7 @@ def check_attendance_for_user(user):
     
     final_percent_str = "N/A"
     final_percent_val = 0.0
-    table_html = ""
+    verified_subjects = [] # Store verified data here
     yesterday_updates = []
 
     try:
@@ -126,65 +126,69 @@ def check_attendance_for_user(user):
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         log("    ✨ Login Success!")
 
+        # 🛠️ SMART REFRESH
+        try:
+            refresh_btn = driver.find_element(By.XPATH, "//button[contains(., 'Refresh')]")
+            driver.execute_script("arguments[0].click();", refresh_btn)
+            log("    🔄 Forced Refresh Triggered. Waiting for table...")
+            wait.until(EC.presence_of_element_located((By.XPATH, "//table[.//th[contains(., 'Attendance Count')]]")))
+            time.sleep(1) 
+            log("    ✅ Table reloaded successfully.")
+        except:
+            log("    ℹ️ Refresh failed or skipped.")
+
         # --- PREP SUMMARY DATA ---
         dash_text = driver.find_element(By.TAG_NAME, "body").text
         if p_match := re.search(r'(\d+\.\d+)%', dash_text):
             final_percent_str = p_match.group(0)
             final_percent_val = float(p_match.group(1))
 
-        # --- 1. SCOPED ROW COLLECTION ---
-        # We need to know the total count of valid subjects first
+        # --- DISCOVERY PHASE (Count potential subjects) ---
         total_subjects = 0
         try:
-            # 🛠️ SCOPE: ONLY the Main Attendance Table
             attendance_table = driver.find_element(By.XPATH, "//table[.//th[contains(., 'Attendance Count')]]")
             raw_rows = attendance_table.find_elements(By.XPATH, ".//tr[td]")
-            
-            # Count how many are actual subjects (have fraction in col 2)
             for row in raw_rows:
                 cols = row.find_elements(By.TAG_NAME, "td")
                 if len(cols) >= 3 and "/" in cols[2].text:
                     total_subjects += 1
-            log(f"    📊 Found {total_subjects} Valid Subject Rows.")
-        except Exception as e:
-            log(f"    ⚠️ Initial Scoping Failed: {e}")
+            log(f"    📊 Found {total_subjects} potential subjects.")
+        except:
+            log("    ⚠️ Table discovery failed.")
             return
 
-        # --- 2. DEEP DIVE: STABLE ITERATION ---
-        log("    🕵️ Deep Dive: Starting Stable Scrape...")
+        # --- DEEP DIVE (Verify & Collect) ---
+        log("    🕵️ Starting Verified Scrape...")
         
         for i in range(total_subjects):
             try:
-                # A. RE-FETCH TABLE & ROWS (Survives DOM Mutation)
+                # A. RE-FETCH TABLE & ROWS
                 attendance_table = driver.find_element(By.XPATH, "//table[.//th[contains(., 'Attendance Count')]]")
                 raw_rows = attendance_table.find_elements(By.XPATH, ".//tr[td]")
                 
-                # B. RE-FILTER to find the ith Subject Row
+                # B. RE-FILTER
                 subject_rows = []
                 for r in raw_rows:
                     cols = r.find_elements(By.TAG_NAME, "td")
                     if len(cols) >= 3 and "/" in cols[2].text:
                         subject_rows.append(r)
                 
-                if i >= len(subject_rows): break # Safety break
+                if i >= len(subject_rows): break 
                 
                 row = subject_rows[i]
                 cols = row.find_elements(By.TAG_NAME, "td")
                 
+                # CAPTURE DATA NOW (While row is valid)
                 subj_name = cols[1].text.strip()
                 count_text = cols[2].text.strip()
                 per = cols[-1].text.strip()
 
-                # Save for Email Table (while we are here)
-                bg = "border-bottom:1px solid #eee;"
-                table_html += f"<tr style='{bg}'><td style='padding:8px;'>{subj_name}</td><td style='text-align:right;'>{per}%<br><span style='color:#666;font-size:0.8em'>{count_text}</span></td></tr>"
-
-                # C. CLICK TARGET (The Anchor Tag)
+                # C. CLICK TARGET
                 try:
                     anchor = cols[2].find_element(By.TAG_NAME, "a")
                     click_target = anchor
                 except NoSuchElementException:
-                    click_target = cols[2] # Fallback
+                    click_target = cols[2] 
 
                 driver.execute_script("arguments[0].scrollIntoView(true);", click_target)
                 time.sleep(0.5)
@@ -192,12 +196,16 @@ def check_attendance_for_user(user):
                 
                 log(f"       [{i+1}/{total_subjects}] Scanned: {subj_name}")
 
-                # D. WAIT & SCRAPE (Robust Relative Wait)
+                # ✅ ADD TO VERIFIED LIST (Because click succeeded)
+                verified_subjects.append({
+                    "name": subj_name,
+                    "count": count_text,
+                    "percent": per
+                })
+
+                # D. WAIT & SCRAPE DETIALS
                 try:
-                    # Wait for ANY date table
                     wait.until(EC.presence_of_element_located((By.XPATH, "//table[.//th[contains(., 'Date')]]")))
-                    
-                    # Find specific table relative to anchor
                     xpath_to_table = f"./following::table[.//th[contains(., 'Date')]][1]"
                     details_table = click_target.find_element(By.XPATH, xpath_to_table)
                     details_rows = details_table.find_elements(By.TAG_NAME, "tr")
@@ -232,7 +240,12 @@ def check_attendance_for_user(user):
                 log(f"       ⚠️ Error on subject {i}: {e}")
                 continue
 
-        # --- EMAIL ---
+        # --- BUILD EMAIL FROM VERIFIED DATA ONLY ---
+        table_html = ""
+        for subj in verified_subjects:
+            bg = "border-bottom:1px solid #eee;"
+            table_html += f"<tr style='{bg}'><td style='padding:8px;'>{subj['name']}</td><td style='text-align:right;'>{subj['percent']}%<br><span style='color:#666;font-size:0.8em'>{subj['count']}</span></td></tr>"
+
         personality = get_personality(final_percent_val)
         subject_line = f"📅 Daily: {final_percent_str}"
         
@@ -268,7 +281,7 @@ def check_attendance_for_user(user):
         driver.quit()
 
 def main():
-    log(f"🚀 BOT V7.9 STABLE SCOPE STARTED")
+    log(f"🚀 BOT V8.2 VERIFIED REPORT STARTED")
     try:
         response = supabase.table("users").select("*").eq("is_active", True).execute()
         all_users = response.data
