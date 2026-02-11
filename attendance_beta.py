@@ -18,7 +18,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🎭 BOT V7.2 (BETA): CLICK-COUNT FIX
+# 🎭 BOT V7.4 (BETA): EXACT STATUS LOGIC
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -91,7 +91,7 @@ def check_attendance_for_user(user):
     wait = WebDriverWait(driver, 25)
     
     final_percent = "N/A"
-    overall_subjects = [] # 📦 STORE MAIN DATA HERE
+    overall_subjects = [] 
     yesterday_html_rows = ""
     has_yesterday_data = False
 
@@ -127,7 +127,6 @@ def check_attendance_for_user(user):
         print(f"    📅 Hunting for date: {date_str_full}")
 
         # --- 3. PHASE 1: SAFE SCRAPE (Get Main Table First) ---
-        # We read the table BEFORE clicking anything to ensure we don't lose data
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
         rows = driver.find_elements(By.CSS_SELECTOR, "tr")
         
@@ -135,13 +134,19 @@ def check_attendance_for_user(user):
             cols = row.find_elements(By.TAG_NAME, "td")
             if len(cols) >= 4:
                 subj_name = cols[1].text.strip()
-                # Skip header or empty rows
+                # Skip header, empty rows, or Total row
                 if "TOTAL" in subj_name.upper() or not subj_name or "Course Name" in subj_name: continue
                 
                 count_text = cols[2].text.strip() # 4/16
                 per_text = cols[3].text.strip()   # 25.00
                 
-                # Save to list for later use
+                # 🛡️ FILTER: Check if 'per_text' is actually a number
+                try:
+                    float(per_text)
+                except ValueError:
+                    continue 
+                
+                # Save to list
                 overall_subjects.append({
                     "name": subj_name,
                     "count": count_text,
@@ -151,25 +156,20 @@ def check_attendance_for_user(user):
         print(f"    ✅ Scraped {len(overall_subjects)} subjects. Now checking details...")
 
         # --- 4. PHASE 2: CLICK COUNTS & CHECK YESTERDAY ---
-        # Now we loop through our SAVED list and find the rows dynamically
         for subj in overall_subjects:
             try:
-                # RE-FIND the row by Subject Name (Robust against DOM changes)
-                # We use contains because sometimes there are extra spaces
+                # Re-find row by subject name
                 xpath_query = f"//td[contains(text(), '{subj['name']}')]/.."
                 row = driver.find_element(By.XPATH, xpath_query)
                 cols = row.find_elements(By.TAG_NAME, "td")
                 
-                # 🎯 CLICK THE ATTENDANCE COUNT (3rd Column)
-                # This opens the detail panel below
+                # Click the "Count" link (3rd Column)
                 link = cols[2].find_element(By.TAG_NAME, "a")
                 driver.execute_script("arguments[0].click();", link)
                 
-                # Wait for the detail panel to load (it's usually AJAX)
                 time.sleep(1.5)
                 
-                # SEARCH FOR DATE IN THE DETAIL PANEL
-                # We look for any TD that contains the date string
+                # Search for Yesterday's Date
                 date_xpath = f"//td[contains(text(), '{date_str_full}')]"
                 found_date_cells = driver.find_elements(By.XPATH, date_xpath)
                 
@@ -178,22 +178,20 @@ def check_attendance_for_user(user):
                 if found_date_cells:
                     # Get the row where the date was found
                     date_row = found_date_cells[0].find_element(By.XPATH, "./..")
-                    row_text = date_row.text
                     
-                    # Logic to find P/A
-                    if " P " in row_text or "(P)" in row_text:
-                        status_yesterday = "✅ Present"
-                    elif " A " in row_text or "(A)" in row_text:
-                        status_yesterday = "❌ Absent"
-                    else:
-                        # Fallback: Check specific column (usually 5th)
-                        d_cols = date_row.find_elements(By.TAG_NAME, "td")
-                        if len(d_cols) > 4:
-                            status_text = d_cols[4].text.strip()
-                            if "P" in status_text: status_yesterday = "✅ Present"
-                            elif "A" in status_text: status_yesterday = "❌ Absent"
+                    # Look at the 5th column (Index 4) for Status
+                    # Based on your screenshot, it's: Sr | Date | Time | Session | Status | Punch In...
+                    d_cols = date_row.find_elements(By.TAG_NAME, "td")
+                    
+                    if len(d_cols) > 4:
+                        status_text = d_cols[4].text.strip()
+                        
+                        # LOGIC: P = Present, Anything else = Absent
+                        if "P" in status_text:
+                            status_yesterday = "✅ Present"
+                        else:
+                            status_yesterday = "❌ Absent"
 
-                # Add to Yesterday Report HTML if found
                 if status_yesterday:
                     has_yesterday_data = True
                     color = "#388E3C" if "Present" in status_yesterday else "#D32F2F"
@@ -204,18 +202,14 @@ def check_attendance_for_user(user):
                     </tr>
                     """
             except Exception as e:
-                # print(f"Skipping {subj['name']}: {e}")
                 pass 
 
-        # --- 5. BUILD FINAL EMAIL (Using Saved List + New Data) ---
-        
-        # Build the Bottom Table from our SAFE list
+        # --- 5. BUILD FINAL EMAIL ---
         table_html = ""
         total_attended = 0
         total_delivered = 0
 
         for subj in overall_subjects:
-            # Calculate Grand Totals
             try:
                 parts = subj['count'].split('/')
                 total_attended += int(parts[0])
@@ -224,8 +218,10 @@ def check_attendance_for_user(user):
 
             bg = "border-bottom:1px solid #eee;"
             text_style = "color:#333;"
-            if float(subj['percent']) < 75:
-                text_style = "color:#D32F2F; font-weight:bold;"
+            try:
+                if float(subj['percent']) < 75:
+                    text_style = "color:#D32F2F; font-weight:bold;"
+            except: pass
             
             table_html += f"""
             <tr style='{bg}'>
@@ -237,7 +233,6 @@ def check_attendance_for_user(user):
             </tr>
             """
 
-        # Build Yesterday Section
         if has_yesterday_data:
             yesterday_section = f"""
             <div style="margin:15px 0; border:1px solid #e0e0e0; border-radius:8px; overflow:hidden;">
@@ -282,7 +277,7 @@ def check_attendance_for_user(user):
             </div>
 
             <div style="background:#f5f5f5; padding:15px; text-align:center; font-size:0.75em; color:#999; margin-top:20px;">
-                NIET Attendance Bot V7.2 (Beta) • <a href="#" style="color:#999;">Aniket Jain</a>
+                NIET Attendance Bot V7.4 (Beta) • <a href="#" style="color:#999;">Aniket Jain</a>
             </div>
         </div>
         """
@@ -301,7 +296,7 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V7.2 (BETA MODE) STARTED")
+    print(f"🚀 BOT V7.4 (BETA MODE) STARTED")
     
     # 🔒 LOCK TO YOUR COLLEGE ID
     target_id = "0231csiot122@niet.co.in"
