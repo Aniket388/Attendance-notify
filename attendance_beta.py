@@ -302,23 +302,24 @@ def main():
 
     print(f"🚀 BOT V7.0 (BETA MODE) STARTED")
     
-    # 🔒 LOCK TO YOUR EMAIL ONLY
-    # We filter by email to be 100% sure we get the right user
-    beta_email = "0231csiot122@niet.co.in"
-    print(f"    🔒 Restricted to Email: {beta_email}")
+    # 🔒 LOCK TO YOUR COLLEGE ID
+    # We search by 'college_id' because that is where '0231csiot122@niet.co.in' is stored
+    target_id = "0231csiot122@niet.co.in"
+    print(f"    🔒 Restricted to College ID: {target_id}")
 
     try:
-        # Fetch ONLY the row matching this email
-        response = supabase.table("users").select("*").eq("target_email", beta_email).execute()
+        # Fetch ONLY the row matching this College ID
+        response = supabase.table("users").select("*").eq("college_id", target_id).execute()
         my_users = response.data
         
         if not my_users:
-            print(f"    ❌ Error: No user found with email {beta_email}")
-            print("       (Check if 'target_email' column in Supabase matches exactly)")
+            print(f"    ❌ Error: No user found with college_id {target_id}")
+            print("       (Double check the 'college_id' column in Supabase)")
             return
 
         # Run the bot for this user
         for user in my_users:
+            print(f"    ✅ Found User! Sending to: {user.get('target_email')}")
             check_attendance_for_user(user)
             
     except Exception as e:
