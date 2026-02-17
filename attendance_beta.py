@@ -19,11 +19,12 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🕵️ BOT V8.6: DIAGNOSTIC MODE
+# 🚀 BOT V8.7: NAVIGATION FLOW FIX
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
-ATTENDANCE_URL = "https://nietcloud.niet.co.in/studentCourseFileNew.htm"
+# We DO NOT force this URL anymore. We navigate to it.
+TARGET_URL_PART = "studentCourseFileNew.htm" 
 BETA_TARGET_ID = "0231csiot122@niet.co.in" 
 
 # 1. LOAD SECRETS
@@ -102,56 +103,54 @@ def check_attendance_for_user(user):
         driver.find_element(By.ID, "password-1").send_keys(college_pass)
         driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
         
+        # Handle Alerts
         try:
             WebDriverWait(driver, 5).until(EC.alert_is_present())
             driver.switch_to.alert.accept()
         except: pass
 
-        # 🚀 FORCE NAVIGATION
-        print("   🚀 Redirecting to Attendance Page...")
-        time.sleep(2) 
-        driver.get(ATTENDANCE_URL)
-        time.sleep(3) # Let it settle (Diagnostic Pause)
+        # 2. NAVIGATE VIA UI (Real User Flow)
+        print("   ⏳ Waiting for Dashboard (home.htm)...")
+        wait.until(EC.url_contains("home.htm"))
         
-        # ====================================================
-        # 🔍 DEBUG DIAGNOSTICS (REQUESTED BY USER)
-        # ====================================================
-        print(f"   🔎 DEBUG URL: {driver.current_url}")
-        print(f"   🔎 DEBUG TITLE: {driver.title}")
-        
-        tables = driver.find_elements(By.TAG_NAME, "table")
-        print(f"   🔎 DEBUG TABLE COUNT: {len(tables)}")
-        
+        print("   🖱️ Clicking 'Attendance' Menu...")
+        # Try to find the link by text "Attendance"
+        # We use contains() because it might be "My Attendance" or have whitespace
         try:
-            print(f"   🔎 DEBUG HTML PREVIEW:\n{driver.page_source[:2000]}")
-        except: print("   ⚠️ Could not print source")
-        # ====================================================
+            attendance_link = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Attendance')]")))
+            driver.execute_script("arguments[0].click();", attendance_link)
+        except:
+            # Fallback: Sometimes it's inside a specific sidebar ID or different text
+            print("   ⚠️ Standard link failed. Trying fallback locator...")
+            attendance_link = driver.find_element(By.PARTIAL_LINK_TEXT, "Attendance")
+            driver.execute_script("arguments[0].click();", attendance_link)
+
+        # 3. VERIFY WE ARE ON ATTENDANCE PAGE
+        print("   ⏳ Waiting for Attendance Page Load...")
+        wait.until(EC.url_contains(TARGET_URL_PART))
         
-        # 🛡️ HARDENED WAIT
-        print("   ⏳ Waiting for Table Structure...")
+        # 4. WAIT FOR DATA TABLE
+        print("   ⏳ Waiting for Data Table...")
+        # Specific XPath for the main data table
         main_table_xpath = "//table[contains(., 'Course Name')]"
         wait.until(EC.presence_of_element_located((By.XPATH, main_table_xpath)))
         
-        # 2. GET TOTAL PERCENTAGE (SCOPED)
+        # 5. SCRAPE DATA
         target_table = driver.find_element(By.XPATH, main_table_xpath)
         table_text = target_table.text
         
         if p_match := re.search(r'(\d+\.\d+)%', table_text):
             final_percent = p_match.group(0)
-            print(f"   📊 Found Percentage (Scoped): {final_percent}")
+            print(f"   📊 Found Percentage: {final_percent}")
             
-            # ====================================================
-            # 🕵️ DEEP SCRAPING (SCOPED & ITERATIVE)
-            # ====================================================
-            
+            # --- START DEEP SCRAPING ---
             initial_rows = target_table.find_elements(By.TAG_NAME, "tr")
             row_count = len(initial_rows)
-
-            print(f"   📋 Scanning {row_count} rows in Target Table...")
+            print(f"   📋 Scanning {row_count} rows...")
 
             for i in range(row_count):
                 try:
-                    # RE-FIND TABLE
+                    # Re-find table (Stale Element Protection)
                     current_table = driver.find_element(By.XPATH, main_table_xpath)
                     current_rows = current_table.find_elements(By.TAG_NAME, "tr")
                     
@@ -175,9 +174,6 @@ def check_attendance_for_user(user):
                     count_text = cols[-2].text.strip()
                     per = cols[-1].text.strip()
                     
-                    try: parts = count_text.split('/')
-                    except: pass
-                    
                     color_style = "color:#333;"
                     if float(per) < 75: color_style = "color:#D32F2F; font-weight:bold;"
                     
@@ -195,6 +191,7 @@ def check_attendance_for_user(user):
                         driver.execute_script("arguments[0].click();", link_element)
                         time.sleep(1.5)
                         
+                        # Find details table (last in DOM)
                         all_tables = driver.find_elements(By.TAG_NAME, "table")
                         detail_rows = all_tables[-1].find_elements(By.TAG_NAME, "tr")
                         daily_statuses = []
@@ -219,17 +216,22 @@ def check_attendance_for_user(user):
                         elif all(s == "P" for s in daily_statuses): yesterday_data[subj_name] = "Present"
                         else: yesterday_data[subj_name] = "Absent"
                             
+                        # RECOVERY
                         try:
                             driver.back()
                             wait.until(EC.presence_of_element_located((By.XPATH, main_table_xpath)))
                             time.sleep(0.5)
                         except:
-                            driver.get(ATTENDANCE_URL) 
+                            # If back fails, re-click the menu to reset state
+                            attendance_link = driver.find_element(By.PARTIAL_LINK_TEXT, "Attendance")
+                            driver.execute_script("arguments[0].click();", attendance_link)
                             wait.until(EC.presence_of_element_located((By.XPATH, main_table_xpath)))
                         
                     except Exception:
                         yesterday_data[subj_name] = "Error"
-                        if "studentCourseFileNew" not in driver.current_url: driver.get(ATTENDANCE_URL)
+                        # Reset to attendance page if lost
+                        if TARGET_URL_PART not in driver.current_url: 
+                             driver.find_element(By.PARTIAL_LINK_TEXT, "Attendance").click()
                 
                 except Exception: continue
 
@@ -258,8 +260,7 @@ def check_attendance_for_user(user):
                 personality = {"quote": "Update", "status": "Update", "color": "#1976D2", "subject_icon": "📅"}
 
             subject_line = f"{personality['subject_icon']} Attendance: {final_percent}"
-            grand_total_text = "See Details" 
-
+            
             html_body = f"""
             <div style="font-family:'Segoe UI', sans-serif; max-width:600px; margin:auto; border:1px solid #e0e0e0; border-radius:12px; overflow:hidden;">
                 <div style="background:{personality['color']}; padding:20px; text-align:center; color:white;">
@@ -279,7 +280,7 @@ def check_attendance_for_user(user):
                     </tr>
                 </table>
                 <div style="padding:15px; text-align:center; background:#fff; border-top:1px solid #eee; font-style:italic; color:#666;">"{personality['quote']}"</div>
-                <div style="background:#f5f5f5; padding:10px; text-align:center; font-size:0.7em; color:#aaa;">Bot V8.6 • Diagnostic Mode</div>
+                <div style="background:#f5f5f5; padding:10px; text-align:center; font-size:0.7em; color:#aaa;">Bot V8.7 • Production Mode</div>
             </div>
             """
             send_email_via_api(target_email, subject_line, html_body)
@@ -300,7 +301,7 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V8.6 DIAGNOSTIC STARTED")
+    print(f"🚀 BOT V8.7 STARTED")
 
     try:
         response = supabase.table("users").select("*").eq("is_active", True).eq("college_id", BETA_TARGET_ID).execute()
