@@ -15,11 +15,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from supabase import create_client, Client
 from cryptography.fernet import Fernet
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 
 # ====================================================
-# 🕵️ BOT V8.9: THE INVESTIGATOR (NO GUESSING)
+# 🕵️ BOT V8.10: FINAL DIAGNOSTIC (SINGLE COMMIT)
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -29,7 +27,6 @@ BETA_TARGET_ID = "0231csiot122@niet.co.in"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
 MASTER_KEY   = os.environ.get("MASTER_KEY", "").strip().encode()
-TOKEN_JSON   = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
 
 # 2. INIT CLIENTS
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -37,7 +34,6 @@ cipher = Fernet(MASTER_KEY)
 
 def check_attendance_for_user(user):
     user_id = user['college_id']
-    
     print(f"\n🔄 Processing: {user_id}")
     
     try:
@@ -74,68 +70,62 @@ def check_attendance_for_user(user):
 
         print("   ⏳ Waiting for Dashboard (home.htm)...")
         wait.until(EC.url_contains("home.htm"))
-        time.sleep(3) # Let DOM settle
+        time.sleep(5) # Allow full DOM render
 
         # ====================================================
-        # 🔬 DIAGNOSTIC PHASE
+        # 🔬 DIAGNOSTIC BLOCK START
         # ====================================================
-        print("\n--- 🔬 DIAGNOSTICS START ---")
-        print(f"🔎 DASHBOARD URL: {driver.current_url}")
-        print(f"🔎 DASHBOARD TITLE: {driver.title}")
-        
-        # TEST 1: Check for frames/iframes
-        iframes = driver.find_elements(By.TAG_NAME, "iframe")
-        frames = driver.find_elements(By.TAG_NAME, "frame")
-        print(f"🔎 FOUND {len(iframes)} IFRAMES and {len(frames)} FRAMES")
-        
-        # TEST 2: Scan for relevant links in Main Content
-        print("🔎 SCANNING MAIN CONTENT FOR LINKS...")
-        all_links = driver.find_elements(By.TAG_NAME, "a")
-        print(f"   ➜ Total <a> tags: {len(all_links)}")
-        
-        attendance_candidates = []
-        for link in all_links:
-            href = link.get_attribute("href")
-            text = link.text.strip()
-            # We look for ANY link that might be attendance related
-            if href and ("studentCourseFileNew" in href or "Attendance" in text or "attendance" in href):
-                attendance_candidates.append(link)
-                print(f"   🎯 CANDIDATE FOUND: Text='{text}' | Href='{href}' | Displayed={link.is_displayed()}")
+        print("\n===== DASHBOARD URL =====")
+        print(driver.current_url)
 
-        # TEST 3: Check inside Frames (if any)
-        if len(iframes) > 0 or len(frames) > 0:
-            print("🔎 SCANNING FRAMES...")
-            # Combine both lists
-            all_frames = iframes + frames
-            for i, frame in enumerate(all_frames):
-                try:
-                    print(f"   ➜ Switching to Frame {i}...")
-                    driver.switch_to.frame(frame)
-                    
-                    frame_links = driver.find_elements(By.TAG_NAME, "a")
-                    print(f"     Found {len(frame_links)} links in frame.")
-                    
-                    for link in frame_links:
-                        href = link.get_attribute("href")
-                        text = link.text.strip()
-                        if href and ("studentCourseFileNew" in href or "Attendance" in text):
-                            print(f"     🎯 FRAME CANDIDATE: Text='{text}' | Href='{href}'")
-                            
-                    driver.switch_to.default_content()
-                except Exception as e:
-                    print(f"     ⚠️ Error scanning frame {i}: {e}")
-                    driver.switch_to.default_content()
+        print("\n===== DASHBOARD TITLE =====")
+        print(driver.title)
 
-        print("--- 🔬 DIAGNOSTICS END ---\n")
-        
-        # If we found a candidate in main content, try to click it just to see
-        if attendance_candidates:
-            print("   🧪 Attempting to click the first candidate...")
-            driver.execute_script("arguments[0].click();", attendance_candidates[0])
-            time.sleep(5)
-            print(f"   🔎 URL AFTER CLICK: {driver.current_url}")
-        else:
-            print("   ❌ NO CANDIDATES FOUND TO CLICK.")
+        print("\n===== DASHBOARD HTML PREVIEW (First 8000 chars) =====")
+        try:
+            print(driver.page_source[:8000])
+        except:
+            print("Error printing source")
+
+        print("\n===== SEARCHING FOR studentCourseFileNew LINKS =====")
+        candidates = driver.find_elements(
+            By.XPATH,
+            "//a[contains(@href,'studentCourseFileNew')]"
+        )
+
+        print("Found:", len(candidates))
+
+        for idx, c in enumerate(candidates):
+            print(f"\n--- LINK {idx} OUTER HTML ---")
+            try:
+                print(c.get_attribute("outerHTML"))
+                print("Displayed:", c.is_displayed())
+                print("Enabled:", c.is_enabled())
+                print("Text Content:", c.text)
+            except Exception as e:
+                print(f"Error reading link {idx}: {e}")
+
+        if candidates:
+            print("\n===== PARENT ELEMENT STRUCTURE =====")
+            try:
+                parent = candidates[0].find_element(By.XPATH, "..")
+                print(parent.get_attribute("outerHTML"))
+                
+                grandparent = parent.find_element(By.XPATH, "..")
+                print("\n--- GRANDPARENT STRUCTURE ---")
+                print(grandparent.get_attribute("outerHTML")[:500]) # First 500 chars
+            except Exception as e:
+                print(f"Error reading parent: {e}")
+
+        print("\n===== SEARCHING FOR 'Academic Functions' MENU =====")
+        academic_menu = driver.find_elements(By.XPATH, "//*[contains(text(), 'Academic Functions')]")
+        print("Found Menu Items:", len(academic_menu))
+        for m in academic_menu:
+             # 🔧 FIXED: tagName -> tag_name
+             print(f"   Tag: {m.tag_name} | Visible: {m.is_displayed()}")
+
+        print("\n===== DIAGNOSTIC BLOCK END =====")
+        # ====================================================
 
     except Exception as e:
         print(f"   ❌ FATAL ERROR: {e}")
@@ -150,7 +140,7 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V8.9 DIAGNOSTIC STARTED")
+    print(f"🚀 BOT V8.10 DIAGNOSTIC STARTED")
 
     try:
         response = supabase.table("users").select("*").eq("is_active", True).eq("college_id", BETA_TARGET_ID).execute()
