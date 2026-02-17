@@ -18,10 +18,14 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🎭 BOT V7.4 (BETA): EXACT STATUS LOGIC
+# 🎭 BOT V8.1: STABLE BETA
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
+# This is the page where the main table lives (fallback URL)
+HOME_URL  = "https://nietcloud.niet.co.in/studentCourseFileNew.htm" 
+
+BETA_TARGET_ID = "0231csiot122@niet.co.in" 
 
 # 1. LOAD SECRETS
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -37,30 +41,28 @@ cipher = Fernet(MASTER_KEY)
 def get_personality(percentage):
     p = float(percentage)
     if p >= 90:
-        return {"quote": "Absolute Legend! 🏆 You basically live at college.", "status": "Safe Category", "color": "#388E3C", "subject_icon": "🏆"}
+        return {"quote": "Absolute Legend! 🏆", "status": "Safe", "color": "#388E3C", "subject_icon": "🏆"}
     elif p >= 75:
-        return {"quote": "You are Safe! ✅ Keep maintaining this flow.", "status": "Safe Category", "color": "#388E3C", "subject_icon": "✅"}
+        return {"quote": "You are Safe! ✅", "status": "Safe", "color": "#388E3C", "subject_icon": "✅"}
     elif p >= 60:
-        return {"quote": "⚠️ You are on thin ice! Don't skip anymore classes.", "status": "Attendance is Low", "color": "#F57C00", "subject_icon": "⚠️"}
+        return {"quote": "⚠️ Thin ice!", "status": "Low", "color": "#F57C00", "subject_icon": "⚠️"}
     else:
-        return {"quote": "🚨 DANGER ZONE! Run to college immediately!", "status": "CRITICAL LOW", "color": "#D32F2F", "subject_icon": "🚨"}
+        return {"quote": "🚨 DANGER ZONE!", "status": "CRITICAL", "color": "#D32F2F", "subject_icon": "🚨"}
 
 def send_email_via_api(target_email, subject, html_content):
-    print(f"   📧 Sending via Gmail API to {target_email}...")
+    print(f"   📧 Sending to {target_email}...")
     try:
         creds_data = json.loads(TOKEN_JSON)
         creds = Credentials.from_authorized_user_info(creds_data)
         service = build('gmail', 'v1', credentials=creds)
-        
         msg = MIMEMultipart("alternative")
         msg['Subject'] = subject
         msg['From'] = "me"
         msg['To'] = target_email
         msg.attach(MIMEText(html_content, "html", "utf-8"))
-        
         raw_msg = base64.urlsafe_b64encode(msg.as_bytes()).decode()
         service.users().messages().send(userId="me", body={'raw': raw_msg}).execute()
-        print("   ✅ Sent successfully (API)!")
+        print("   ✅ Sent successfully!")
         return True
     except Exception as e:
         print(f"   ❌ API Send Failed: {e}")
@@ -75,7 +77,7 @@ def check_attendance_for_user(user):
     try:
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
     except:
-        print("    ❌ Decryption Failed")
+        print("   ❌ Decryption Failed")
         return
 
     # BROWSER SETUP
@@ -86,19 +88,26 @@ def check_attendance_for_user(user):
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-popup-blocking")
-    
+    chrome_options.set_capability("unhandledPromptBehavior", "accept")
+
     driver = webdriver.Chrome(options=chrome_options)
     wait = WebDriverWait(driver, 25)
     
+    # DATA CONTAINERS
     final_percent = "N/A"
-    overall_subjects = [] 
-    yesterday_html_rows = ""
-    has_yesterday_data = False
+    main_table_rows_html = ""
+    yesterday_data = {} 
+    
+    # DATE LOGIC
+    # Portal format: "Feb 17,2026"
+    yesterday_obj = datetime.now() - timedelta(days=1)
+    yesterday_str = yesterday_obj.strftime("%b %d,%Y")
+    
+    print(f"   📅 Target Yesterday: '{yesterday_str}'")
 
     try:
+        # 1. LOGIN
         driver.get(LOGIN_URL)
-        
-        # POP-UP HANDLER
         try:
             WebDriverWait(driver, 3).until(EC.alert_is_present())
             driver.switch_to.alert.accept()
@@ -109,184 +118,233 @@ def check_attendance_for_user(user):
         driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
         
         try:
-            WebDriverWait(driver, 5).until(EC.alert_is_present())
+            WebDriverWait(driver, 3).until(EC.alert_is_present())
             driver.switch_to.alert.accept()
         except: pass
 
         wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Attendance"))
         
-        # --- 1. GET TOTAL PERCENTAGE ---
+        # 2. GET TOTAL PERCENTAGE
         dash_text = driver.find_element(By.TAG_NAME, "body").text
         if p_match := re.search(r'(\d+\.\d+)%', dash_text):
             final_percent = p_match.group(0)
-            print(f"    📊 Found Total: {final_percent}")
+            
+            # Navigate to detailed view
+            try:
+                xpath_query = f"//*[contains(text(),'{final_percent}')]"
+                target = driver.find_element(By.XPATH, xpath_query)
+                driver.execute_script("arguments[0].click();", target)
+                try: driver.execute_script("arguments[0].click();", target.find_element(By.XPATH, ".."))
+                except: pass
+            except: pass
+            
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
+            time.sleep(2) 
 
-        # --- 2. PREPARE YESTERDAY'S DATE ---
-        yesterday_obj = (datetime.now() - timedelta(days=1))
-        date_str_full = yesterday_obj.strftime("%b %d, %Y").replace(" 0", " ") 
-        print(f"    📅 Hunting for date: {date_str_full}")
+            # ====================================================
+            # 🕵️ DEEP SCRAPING (V8.1 OPTIMIZED)
+            # ====================================================
+            
+            initial_rows = driver.find_elements(By.TAG_NAME, "tr")
+            total_attended = 0
+            total_delivered = 0
+            row_count = len(initial_rows)
 
-        # --- 3. PHASE 1: SAFE SCRAPE (Get Main Table First) ---
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
-        rows = driver.find_elements(By.CSS_SELECTOR, "tr")
-        
-        for row in rows:
-            cols = row.find_elements(By.TAG_NAME, "td")
-            if len(cols) >= 4:
-                subj_name = cols[1].text.strip()
-                # Skip header, empty rows, or Total row
-                if "TOTAL" in subj_name.upper() or not subj_name or "Course Name" in subj_name: continue
-                
-                count_text = cols[2].text.strip() # 4/16
-                per_text = cols[3].text.strip()   # 25.00
-                
-                # 🛡️ FILTER: Check if 'per_text' is actually a number
+            print(f"   📋 Scanning {row_count} rows...")
+
+            for i in range(row_count):
                 try:
-                    float(per_text)
-                except ValueError:
-                    continue 
-                
-                # Save to list
-                overall_subjects.append({
-                    "name": subj_name,
-                    "count": count_text,
-                    "percent": per_text
-                })
-
-        print(f"    ✅ Scraped {len(overall_subjects)} subjects. Now checking details...")
-
-        # --- 4. PHASE 2: CLICK COUNTS & CHECK YESTERDAY ---
-        for subj in overall_subjects:
-            try:
-                # Re-find row by subject name
-                xpath_query = f"//td[contains(text(), '{subj['name']}')]/.."
-                row = driver.find_element(By.XPATH, xpath_query)
-                cols = row.find_elements(By.TAG_NAME, "td")
-                
-                # Click the "Count" link (3rd Column)
-                link = cols[2].find_element(By.TAG_NAME, "a")
-                driver.execute_script("arguments[0].click();", link)
-                
-                time.sleep(1.5)
-                
-                # Search for Yesterday's Date
-                date_xpath = f"//td[contains(text(), '{date_str_full}')]"
-                found_date_cells = driver.find_elements(By.XPATH, date_xpath)
-                
-                status_yesterday = None
-                
-                if found_date_cells:
-                    # Get the row where the date was found
-                    date_row = found_date_cells[0].find_element(By.XPATH, "./..")
+                    # RE-FIND TABLE (Stale Element Fix)
+                    current_rows = driver.find_elements(By.TAG_NAME, "tr")
+                    if i >= len(current_rows): break
                     
-                    # Look at the 5th column (Index 4) for Status
-                    # Based on your screenshot, it's: Sr | Date | Time | Session | Status | Punch In...
-                    d_cols = date_row.find_elements(By.TAG_NAME, "td")
+                    row = current_rows[i]
+                    cols = row.find_elements(By.TAG_NAME, "td")
                     
-                    if len(d_cols) > 4:
-                        status_text = d_cols[4].text.strip()
+                    if len(cols) < 4: continue
+                    
+                    subj_name = cols[1].text.strip()
+                    if not subj_name: continue
+                    
+                    if "Total" in cols[0].text:
+                        main_table_rows_html += f"""
+                        <tr style='background-color:#f0f7ff; font-weight:bold; border-top: 2px solid #ddd;'>
+                           <td style='padding:8px 4px; color:#000; font-size:0.9em;'>GRAND TOTAL</td>
+                           <td style='text-align:right; padding:8px 4px; font-size:0.9em;'>{cols[-1].text.strip()}%</td>
+                        </tr>"""
+                        continue
+
+                    # 1. SCRAPE MAIN DATA
+                    count_text = cols[-2].text.strip()
+                    per = cols[-1].text.strip()
+                    
+                    try:
+                        parts = count_text.split('/')
+                        if len(parts) == 2:
+                            total_attended += int(parts[0])
+                            total_delivered += int(parts[1])
+                    except: pass
+                    
+                    color_style = "color:#333;"
+                    if float(per) < 75: color_style = "color:#D32F2F; font-weight:bold;"
+                    
+                    main_table_rows_html += f"""
+                    <tr style='border-bottom:1px solid #eee;'>
+                        <td style='padding:8px 4px; {color_style}'>{subj_name}</td>
+                        <td style='text-align:right; padding:8px 4px; {color_style}'>
+                            {per}% <span style='font-size:0.8em; color:#999;'>({count_text})</span>
+                        </td>
+                    </tr>"""
+
+                    # 2. CLICK & CHECK YESTERDAY
+                    try:
+                        link_element = cols[-2].find_element(By.TAG_NAME, "a")
+                        driver.execute_script("arguments[0].click();", link_element)
                         
-                        # LOGIC: P = Present, Anything else = Absent
-                        if "P" in status_text:
-                            status_yesterday = "✅ Present"
+                        time.sleep(1.5) # Wait for slide-down/load
+                        
+                        # Find details table (Last table in DOM)
+                        all_tables = driver.find_elements(By.TAG_NAME, "table")
+                        detail_rows = all_tables[-1].find_elements(By.TAG_NAME, "tr")
+                        
+                        daily_statuses = []
+                        
+                        # Scan BOTTOM-UP
+                        for d_row in reversed(detail_rows):
+                            d_cols = d_row.find_elements(By.TAG_NAME, "td")
+                            if len(d_cols) < 5: continue
+                            
+                            d_date_str = d_cols[1].text.strip() # "Feb 17,2026"
+                            # 🔧 FIX 1: Correct Status Column (Index 4, not 3)
+                            d_stat = d_cols[4].text.strip() 
+                            
+                            if d_date_str == yesterday_str:
+                                if d_stat == "P":
+                                    daily_statuses.append("P")
+                                else:
+                                    daily_statuses.append("A")
+                            
+                            # 🔧 FIX 2: Optimized Date Break
+                            # If we see a date older than yesterday, we can stop scanning this subject
+                            try:
+                                current_row_date = datetime.strptime(d_date_str, "%b %d,%Y")
+                                # Compare dates (ignoring time)
+                                if current_row_date.date() < yesterday_obj.date():
+                                    break
+                            except:
+                                pass # If date parse fails, keep scanning to be safe
+                            
+                        # 3. DETERMINE STATUS
+                        if not daily_statuses:
+                            yesterday_data[subj_name] = "No Class"
+                        elif all(s == "P" for s in daily_statuses):
+                            yesterday_data[subj_name] = "Present"
                         else:
-                            status_yesterday = "❌ Absent"
+                            yesterday_data[subj_name] = "Absent"
+                            
+                        # 4. SAFE RECOVERY
+                        try:
+                            driver.back()
+                            wait.until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
+                            time.sleep(0.5)
+                        except:
+                            # 🔧 FIX 3: Fallback if back() fails - Reload main page
+                            print("   ⚠️ Back nav failed. Reloading home...")
+                            driver.get(HOME_URL) 
+                            wait.until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
+                        
+                    except Exception as e:
+                        # print(f"   ⚠️ Detailed scrape skipped: {e}")
+                        yesterday_data[subj_name] = "Error"
+                        # Ensure we are back on track for next loop
+                        if "studentCourseFileNew" not in driver.current_url:
+                             driver.get(HOME_URL)
+                
+                except Exception as row_e:
+                    continue
 
-                if status_yesterday:
-                    has_yesterday_data = True
-                    color = "#388E3C" if "Present" in status_yesterday else "#D32F2F"
-                    yesterday_html_rows += f"""
-                    <tr>
-                        <td style="padding:8px; border-bottom:1px solid #eee; font-size:0.9em; color:#555;">{subj['name']}</td>
-                        <td style="padding:8px; border-bottom:1px solid #eee; text-align:right; font-weight:bold; color:{color};">{status_yesterday}</td>
-                    </tr>
-                    """
-            except Exception as e:
-                pass 
+            # --- BUILD EMAIL HTML ---
+            yesterday_rows_html = ""
+            for subj, status in yesterday_data.items():
+                # 🔧 FIX 4: "No Class" is now displayed, not skipped
+                
+                bg_color = "transparent"
+                text_color = "#333"
+                
+                if status == "Present":
+                    text_color = "#388E3C"
+                elif status == "Absent":
+                    text_color = "#D32F2F"
+                    bg_color = "#ffebee"
+                elif status == "No Class":
+                    text_color = "#999"
 
-        # --- 5. BUILD FINAL EMAIL ---
-        table_html = ""
-        total_attended = 0
-        total_delivered = 0
-
-        for subj in overall_subjects:
-            try:
-                parts = subj['count'].split('/')
-                total_attended += int(parts[0])
-                total_delivered += int(parts[1])
-            except: pass
-
-            bg = "border-bottom:1px solid #eee;"
-            text_style = "color:#333;"
-            try:
-                if float(subj['percent']) < 75:
-                    text_style = "color:#D32F2F; font-weight:bold;"
-            except: pass
+                yesterday_rows_html += f"""
+                <tr>
+                    <td style='padding:6px; font-size:0.85em; color:#555;'>{subj}</td>
+                    <td style='padding:6px; font-size:0.85em; font-weight:bold; text-align:right; color:{text_color}; background:{bg_color}; border-radius:4px;'>
+                        {status}
+                    </td>
+                </tr>
+                """
             
-            table_html += f"""
-            <tr style='{bg}'>
-                <td style='padding:10px; {text_style}'>{subj['name']}</td>
-                <td style='text-align:right; padding:10px;'>
-                    <div style='{text_style}'>{subj['percent']}%</div>
-                    <div style='color:#777; font-size:0.8em;'>{subj['count']}</div>
-                </td>
-            </tr>
-            """
+            if not yesterday_rows_html:
+                yesterday_rows_html = "<tr><td colspan='2' style='text-align:center; color:#999; padding:10px;'>No classes yesterday</td></tr>"
 
-        if has_yesterday_data:
-            yesterday_section = f"""
-            <div style="margin:15px 0; border:1px solid #e0e0e0; border-radius:8px; overflow:hidden;">
-                <div style="background:#f0f7ff; padding:8px; font-weight:bold; text-align:center; color:#0056b3; font-size:0.9em; border-bottom:1px solid #e0e0e0;">
-                    📅 Yesterday's Report ({date_str_full})
+            try:
+                val = float(re.search(r'\d+\.?\d*', final_percent).group())
+                personality = get_personality(val)
+            except: 
+                personality = {"quote": "Update", "status": "Update", "color": "#1976D2", "subject_icon": "📅"}
+
+            subject_line = f"{personality['subject_icon']} Attendance: {final_percent}"
+            grand_total_text = f"{total_attended} / {total_delivered}"
+
+            html_body = f"""
+            <div style="font-family:'Segoe UI', sans-serif; max-width:600px; margin:auto; border:1px solid #e0e0e0; border-radius:12px; overflow:hidden;">
+                
+                <div style="background:{personality['color']}; padding:20px; text-align:center; color:white;">
+                    <h1 style="margin:0; font-size:2.5em; font-weight:bold;">{final_percent}</h1>
+                    <p style="margin:5px 0 0 0; font-size:1.2em; opacity:0.9;">{grand_total_text} • {personality['status']}</p>
                 </div>
-                <table style="width:100%; border-collapse:collapse; background:#fff;">
-                    {yesterday_html_rows}
+
+                <table style="width:100%; border-collapse:collapse;">
+                    <tr>
+                        <td style="width:60%; vertical-align:top; padding:0; border-right:1px solid #eee;">
+                            <div style="padding:10px; background:#f9f9f9; border-bottom:1px solid #eee; font-weight:bold; color:#555; font-size:0.9em;">
+                                CURRENT STATUS
+                            </div>
+                            <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
+                                {main_table_rows_html}
+                            </table>
+                        </td>
+
+                        <td style="width:40%; vertical-align:top; padding:0; background:#fafafa;">
+                            <div style="padding:10px; background:#eee; border-bottom:1px solid #ddd; font-weight:bold; color:#555; font-size:0.9em;">
+                                YESTERDAY ({yesterday_str})
+                            </div>
+                            <table style="width:100%; border-collapse:collapse;">
+                                {yesterday_rows_html}
+                            </table>
+                        </td>
+                    </tr>
                 </table>
+
+                <div style="padding:15px; text-align:center; background:#fff; border-top:1px solid #eee; font-style:italic; color:#666;">
+                    "{personality['quote']}"
+                </div>
+
+                <div style="background:#f5f5f5; padding:10px; text-align:center; font-size:0.7em; color:#aaa;">
+                    Bot V8.1 • Beta Mode
+                </div>
             </div>
             """
-        else:
-            yesterday_section = f"""
-            <div style="margin:15px 0; padding:12px; text-align:center; background:#fafafa; border-radius:8px; color:#888; font-size:0.85em; border:1px dashed #ddd;">
-                No classes recorded for yesterday ({date_str_full}).
-            </div>
-            """
-
-        val = float(re.search(r'\d+\.?\d*', final_percent).group()) if final_percent != "N/A" else 0
-        personality = get_personality(val)
-        
-        subject_line = f"{personality['subject_icon']} {personality['status']}: {final_percent}"
-        grand_total_text = f"{total_attended} / {total_delivered}"
-
-        final_body = f"""
-        <div style="font-family:'Segoe UI', sans-serif; max-width:500px; margin:auto; border:1px solid #e0e0e0; border-radius:12px; overflow:hidden;">
-            <div style="background:{personality['color']}; padding:25px; text-align:center; color:white;">
-                <h1 style="margin:0; font-size:2.8em; font-weight:bold;">{final_percent}</h1>
-                <p style="margin:5px 0 0 0; font-size:1.4em; font-weight:bold; opacity:0.9;">{grand_total_text}</p>
-                <p style="margin:5px 0 0 0; font-size:1.1em; opacity:0.8;">{personality['status']}</p>
-            </div>
             
-            <div style="padding:0 20px;">
-                {yesterday_section}
-            </div>
-
-            <div style="padding:0 20px;">
-                <h3 style="border-bottom:2px solid #eee; padding-bottom:5px; margin-bottom:10px; color:#444; font-size:1.1em;">Overall Status</h3>
-                <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
-                    {table_html}
-                </table>
-            </div>
-
-            <div style="background:#f5f5f5; padding:15px; text-align:center; font-size:0.75em; color:#999; margin-top:20px;">
-                NIET Attendance Bot V7.4 (Beta) • <a href="#" style="color:#999;">Aniket Jain</a>
-            </div>
-        </div>
-        """
-        
-        send_email_via_api(target_email, subject_line, final_body)
+            send_email_via_api(target_email, subject_line, html_body)
 
     except Exception as e:
-        print(f"    ❌ Error: {e}")
-
+        print(f"   ❌ Error: {e}")
+        
     finally:
         driver.quit()
 
@@ -296,26 +354,29 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V7.4 (BETA MODE) STARTED")
-    
-    # 🔒 LOCK TO YOUR COLLEGE ID
-    target_id = "0231csiot122@niet.co.in"
-    print(f"    🔒 Restricted to College ID: {target_id}")
+    print(f"🚀 BOT V8.1 BETA STARTED")
 
     try:
-        response = supabase.table("users").select("*").eq("college_id", target_id).execute()
-        my_users = response.data
+        # 🔒 BETA QUERY
+        response = supabase.table("users") \
+            .select("*") \
+            .eq("is_active", True) \
+            .eq("college_id", BETA_TARGET_ID) \
+            .execute()
+            
+        all_users = response.data
         
-        if not my_users:
-            print(f"    ❌ Error: No user found with college_id {target_id}")
+        if not all_users:
+            print(f"   ⚠️ Beta User {BETA_TARGET_ID} not found or inactive.")
             return
 
-        for user in my_users:
-            print(f"    ✅ Found User! Sending to: {user.get('target_email')}")
+        print(f"   ✅ Found Beta User. Starting...")
+
+        for user in all_users:
             check_attendance_for_user(user)
             
     except Exception as e:
-        print(f"    🔥 CRITICAL ERROR: {e}")
+        print(f"🔥 CRITICAL ERROR: {e}")
 
 if __name__ == "__main__":
     main()
