@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🛡️ BOT V9.1: BULLETPROOF AJAX EDITION
+# 🛡️ BOT V9.2: BULLETPROOF AJAX + MODERN UI EDITION
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -86,8 +86,7 @@ def check_attendance_for_user(user):
     wait = WebDriverWait(driver, 30)
     
     final_percent = "N/A"
-    main_table_rows_html = ""
-    yesterday_data = {} 
+    parsed_subjects = [] # 🆕 Store data here first before building HTML
     
     yesterday_obj = datetime.now() - timedelta(days=1)
     yesterday_str = yesterday_obj.strftime("%b %d,%Y")
@@ -152,6 +151,8 @@ def check_attendance_for_user(user):
         
         print(f"   📋 Scanning {row_count} subjects...")
 
+        grand_total_row = None
+
         for i in range(row_count):
             try:
                 # Re-find main table to avoid stale elements
@@ -166,27 +167,15 @@ def check_attendance_for_user(user):
                 subj_name = cols[1].text.strip()
                 if not subj_name: continue
                 
-                if "Total" in cols[0].text:
-                    main_table_rows_html += f"""
-                    <tr style='background-color:#f0f7ff; font-weight:bold; border-top: 2px solid #ddd;'>
-                       <td style='padding:8px 4px; color:#000; font-size:0.9em;'>GRAND TOTAL</td>
-                       <td style='text-align:right; padding:8px 4px; font-size:0.9em;'>{cols[-1].text.strip()}%</td>
-                    </tr>"""
-                    continue
-
                 count_text = cols[-2].text.strip()
                 per = cols[-1].text.strip()
-                
-                color_style = "color:#333;"
-                if float(per) < 75: color_style = "color:#D32F2F; font-weight:bold;"
-                
-                main_table_rows_html += f"""
-                <tr style='border-bottom:1px solid #eee;'>
-                    <td style='padding:8px 4px; {color_style}'>{subj_name}</td>
-                    <td style='text-align:right; padding:8px 4px; {color_style}'>
-                        {per}% <span style='font-size:0.8em; color:#999;'>({count_text})</span>
-                    </td>
-                </tr>"""
+
+                if "Total" in cols[0].text:
+                    grand_total_row = {"name": "GRAND TOTAL", "percent": per, "count": count_text}
+                    continue
+
+                # Default yesterday status
+                y_status = "No Class"
 
                 # ==========================================
                 # 🛡️ THE BULLETPROOF AJAX EXTRACTOR
@@ -238,64 +227,108 @@ def check_attendance_for_user(user):
                             if current_row_date.date() < yesterday_obj.date(): break
                         except: pass
                         
-                    if not daily_statuses: yesterday_data[subj_name] = "No Class"
-                    elif all(s == "P" for s in daily_statuses): yesterday_data[subj_name] = "Present"
-                    else: yesterday_data[subj_name] = "Absent"
+                    if not daily_statuses: y_status = "No Class"
+                    elif all(s == "P" for s in daily_statuses): y_status = "Present"
+                    else: y_status = "Absent"
                         
                 except Exception as e:
-                    print(f"   ⚠️ Details scrape failed for {subj_name}: {e}")
-                    yesterday_data[subj_name] = "Error"
+                    print(f"   ⚠️ Details scrape failed for {subj_name}")
+                    y_status = "Error"
+                
+                # 🆕 Append clean data to our list
+                parsed_subjects.append({
+                    "name": subj_name,
+                    "percent": per,
+                    "count": count_text,
+                    "yesterday": y_status
+                })
             
             except Exception as row_e: continue
 
-        # --- BUILD EMAIL ---
-        yesterday_rows_html = ""
-        for subj, status in yesterday_data.items():
-            bg_color = "transparent"
-            text_color = "#333"
-            if status == "Present": text_color = "#388E3C"
-            elif status == "Absent": text_color = "#D32F2F"; bg_color = "#ffebee"
-            elif status == "No Class": text_color = "#999"
-
-            yesterday_rows_html += f"""
-            <tr>
-                <td style='padding:6px; font-size:0.85em; color:#555;'>{subj}</td>
-                <td style='padding:6px; font-size:0.85em; font-weight:bold; text-align:right; color:{text_color}; background:{bg_color}; border-radius:4px;'>{status}</td>
-            </tr>"""
-        
-        if not yesterday_rows_html:
-            yesterday_rows_html = "<tr><td colspan='2' style='text-align:center; color:#999; padding:10px;'>No classes yesterday</td></tr>"
-
+        # ==========================================
+        # 🎨 BUILD MODERN HTML EMAIL
+        # ==========================================
         try:
             val = float(re.search(r'\d+\.?\d*', final_percent).group())
             personality = get_personality(val)
         except: 
             personality = {"quote": "Update", "status": "Update", "color": "#1976D2", "subject_icon": "📅"}
 
+        table_html = ""
+        for subj in parsed_subjects:
+            # Color Logic
+            p_val = float(subj['percent']) if subj['percent'].replace('.','',1).isdigit() else 100
+            p_color = "#d32f2f" if p_val < 75 else "#202124"
+            p_weight = "bold" if p_val < 75 else "600"
+
+            # Badge Logic
+            if subj['yesterday'] == "Present":
+                badge = "<span style='background-color:#e6f4ea; color:#137333; padding:4px 10px; border-radius:12px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Present</span>"
+            elif subj['yesterday'] == "Absent":
+                badge = "<span style='background-color:#fce8e6; color:#c5221f; padding:4px 10px; border-radius:12px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Absent</span>"
+            else:
+                badge = "<span style='color:#bdc1c6; font-size:1.2em; font-weight:bold;'>-</span>"
+
+            table_html += f"""
+            <tr style="border-bottom: 1px solid #f1f3f4;">
+                <td style="padding: 14px 16px; font-size: 0.9em; color: #3c4043; line-height: 1.4;">{subj['name']}</td>
+                <td style="padding: 14px 16px; text-align: right; white-space: nowrap;">
+                    <div style="font-size: 0.95em; color: {p_color}; font-weight: {p_weight};">{subj['percent']}%</div>
+                    <div style="font-size: 0.75em; color: #80868b; margin-top: 2px;">{subj['count']}</div>
+                </td>
+                <td style="padding: 14px 16px; text-align: right; white-space: nowrap; width: 80px;">
+                    {badge}
+                </td>
+            </tr>
+            """
+
+        # Add Grand Total Row if it exists
+        if grand_total_row:
+            table_html += f"""
+            <tr style="background-color: #f8f9fa;">
+                <td style="padding: 16px; font-size: 0.9em; color: #202124; font-weight: 700;">{grand_total_row['name']}</td>
+                <td style="padding: 16px; text-align: right; font-size: 0.95em; color: #202124; font-weight: 700;" colspan="2">
+                    {grand_total_row['percent']}% <span style="font-size:0.8em; color:#5f6368; font-weight:normal;">({grand_total_row['count']})</span>
+                </td>
+            </tr>
+            """
+
         subject_line = f"{personality['subject_icon']} Attendance: {final_percent}"
         
+        # Unified Modern Card Template
         html_body = f"""
-        <div style="font-family:'Segoe UI', sans-serif; max-width:600px; margin:auto; border:1px solid #e0e0e0; border-radius:12px; overflow:hidden;">
-            <div style="background:{personality['color']}; padding:20px; text-align:center; color:white;">
-                <h1 style="margin:0; font-size:2.5em; font-weight:bold;">{final_percent}</h1>
-                <p style="margin:5px 0 0 0; font-size:1.2em; opacity:0.9;">{personality['status']}</p>
+        <div style="background-color: #f4f6f8; padding: 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e8eaed;">
+                
+                <div style="background-color: {personality['color']}; padding: 32px 20px; text-align: center;">
+                    <h1 style="margin: 0; font-size: 3.2em; font-weight: 800; color: #ffffff; letter-spacing: -1px;">{final_percent}</h1>
+                    <p style="margin: 8px 0 0 0; font-size: 1.1em; color: rgba(255,255,255,0.9); font-weight: 500; text-transform: uppercase; letter-spacing: 1px;">{personality['status']}</p>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #e8eaed;">
+                            <th style="padding: 12px 16px; text-align: left; font-size: 0.75em; text-transform: uppercase; color: #5f6368; font-weight: 600; letter-spacing: 0.5px;">Subject</th>
+                            <th style="padding: 12px 16px; text-align: right; font-size: 0.75em; text-transform: uppercase; color: #5f6368; font-weight: 600; letter-spacing: 0.5px;">Status</th>
+                            <th style="padding: 12px 16px; text-align: right; font-size: 0.75em; text-transform: uppercase; color: #5f6368; font-weight: 600; letter-spacing: 0.5px;">Yesterday</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {table_html}
+                    </tbody>
+                </table>
+
+                <div style="padding: 24px 20px; text-align: center; background-color: #ffffff; border-top: 1px solid #e8eaed;">
+                    <p style="margin: 0; color: #5f6368; font-style: italic; font-size: 0.95em;">"{personality['quote']}"</p>
+                </div>
+                
+                <div style="background-color: #f8f9fa; padding: 12px; text-align: center; font-size: 0.7em; color: #9aa0a6; border-top: 1px solid #e8eaed;">
+                    NIET Attendance Bot • Modern Edition
+                </div>
             </div>
-            <table style="width:100%; border-collapse:collapse;">
-                <tr>
-                    <td style="width:60%; vertical-align:top; padding:0; border-right:1px solid #eee;">
-                        <div style="padding:10px; background:#f9f9f9; border-bottom:1px solid #eee; font-weight:bold; color:#555; font-size:0.9em;">CURRENT STATUS</div>
-                        <table style="width:100%; border-collapse:collapse; font-size:0.9em;">{main_table_rows_html}</table>
-                    </td>
-                    <td style="width:40%; vertical-align:top; padding:0; background:#fafafa;">
-                        <div style="padding:10px; background:#eee; border-bottom:1px solid #ddd; font-weight:bold; color:#555; font-size:0.9em;">YESTERDAY ({yesterday_str})</div>
-                        <table style="width:100%; border-collapse:collapse;">{yesterday_rows_html}</table>
-                    </td>
-                </tr>
-            </table>
-            <div style="padding:15px; text-align:center; background:#fff; border-top:1px solid #eee; font-style:italic; color:#666;">"{personality['quote']}"</div>
-            <div style="background:#f5f5f5; padding:10px; text-align:center; font-size:0.7em; color:#aaa;">Bot V9.1 • Stable Release</div>
         </div>
         """
+        
         send_email_via_api(target_email, subject_line, html_body)
 
     except Exception as e:
@@ -311,7 +344,7 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V9.1 STARTED")
+    print(f"🚀 BOT V9.2 STARTED")
 
     try:
         response = supabase.table("users").select("*").eq("is_active", True).eq("college_id", BETA_TARGET_ID).execute()
