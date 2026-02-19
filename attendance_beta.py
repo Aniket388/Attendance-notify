@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🛡️ BOT V9.3: MATERIAL DESIGN + MATH RESTORED
+# 🛡️ BOT V9.4: MATTE MODERN UI EDITION
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -35,12 +35,14 @@ TOKEN_JSON   = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 cipher = Fernet(MASTER_KEY)
 
+# 🎨 NEW MATTE COLOR PALETTE
 def get_personality(percentage):
     p = float(percentage)
-    if p >= 90: return {"quote": "Absolute Legend! 🏆 Basically living at college.", "status": "Safe Zone", "color": "#1e8e3e", "subject_icon": "🏆"}
-    elif p >= 75: return {"quote": "You are Safe! Keep maintaining this flow.", "status": "On Track", "color": "#1e8e3e", "subject_icon": "✅"}
-    elif p >= 60: return {"quote": "You are on thin ice! Don't skip anymore classes.", "status": "Attendance is Low", "color": "#f29900", "subject_icon": "⚠️"}
-    else: return {"quote": "DANGER ZONE! Run to college immediately!", "status": "Critical Low", "color": "#d93025", "subject_icon": "🚨"}
+    # Colors updated to sophisticated matte tones
+    if p >= 90: return {"quote": "Absolute Legend! 🏆 Basically living at college.", "status": "Safe Zone", "color": "#3A7D68", "subject_icon": "🏆"} # Matte Deep Sage
+    elif p >= 75: return {"quote": "You are Safe! Keep maintaining this flow.", "status": "On Track", "color": "#3A7D68", "subject_icon": "✅"} # Matte Deep Sage
+    elif p >= 60: return {"quote": "You are on thin ice! Don't skip anymore classes.", "status": "Attendance is Low", "color": "#C27C2E", "subject_icon": "⚠️"} # Matte Burnt Ochre
+    else: return {"quote": "DANGER ZONE! Run to college immediately!", "status": "Critical Low", "color": "#B94A40", "subject_icon": "🚨"} # Matte Brick Red
 
 def send_email_via_api(target_email, subject, html_content):
     print(f"   📧 Sending to {target_email}...")
@@ -87,8 +89,6 @@ def check_attendance_for_user(user):
     
     final_percent = "N/A"
     parsed_subjects = [] 
-    
-    # 🆕 Math Trackers restored!
     total_attended = 0
     total_delivered = 0
     
@@ -168,10 +168,8 @@ def check_attendance_for_user(user):
                 count_text = cols[-2].text.strip()
                 per = cols[-1].text.strip()
 
-                if "Total" in cols[0].text:
-                    continue # Skip the total row, we are calculating it dynamically
+                if "Total" in cols[0].text: continue 
 
-                # 🆕 Extract Math for Grand Total
                 try:
                     parts = count_text.split('/')
                     if len(parts) == 2:
@@ -179,7 +177,6 @@ def check_attendance_for_user(user):
                         total_delivered += int(parts[1])
                 except: pass
 
-                # Default yesterday status
                 y_status = "No Class"
 
                 try:
@@ -240,7 +237,7 @@ def check_attendance_for_user(user):
             except Exception as row_e: continue
 
         # ==========================================
-        # 🎨 BUILD MATERIAL DESIGN HTML EMAIL
+        # 🎨 BUILD MATTE MODERN HTML EMAIL
         # ==========================================
         try:
             val = float(re.search(r'\d+\.?\d*', final_percent).group())
@@ -250,27 +247,30 @@ def check_attendance_for_user(user):
 
         table_html = ""
         for subj in parsed_subjects:
-            # Color Logic
+            # Matte Color Logic for low attendance text
             p_val = float(subj['percent']) if subj['percent'].replace('.','',1).isdigit() else 100
-            p_color = "#d93025" if p_val < 75 else "#202124"
-            p_weight = "bold" if p_val < 75 else "500"
+            # Use the new matte brick red for low attendance text
+            p_color = "#B94A40" if p_val < 75 else "#3C4043" 
+            p_weight = "600" if p_val < 75 else "500"
 
-            # Material Badges (Pills)
+            # Matte Badges (Pills) - Subtle backgrounds, strong matte text
             if subj['yesterday'] == "Present":
-                badge = "<span style='background-color:#e6f4ea; color:#137333; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:600; letter-spacing:0.3px; text-transform:uppercase;'>Present</span>"
+                # Subtle Sage BG, Matte Teal Text
+                badge = "<span style='background-color:#E8F3F0; color:#2E6B58; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Present</span>"
             elif subj['yesterday'] == "Absent":
-                badge = "<span style='background-color:#fce8e6; color:#c5221f; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:600; letter-spacing:0.3px; text-transform:uppercase;'>Absent</span>"
+                # Subtle Coral BG, Matte Brick Text
+                badge = "<span style='background-color:#F7EBEA; color:#9E3F36; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Absent</span>"
             else:
-                badge = "<span style='color:#bdc1c6; font-size:1.2em; font-weight:bold;'>-</span>"
+                badge = "<span style='color:#9AA0A6; font-size:1.5em; line-height:0.8;'>-</span>"
 
             table_html += f"""
-            <tr style="border-bottom: 1px solid #e0e0e0;">
-                <td style="padding: 16px 20px; font-size: 0.9em; color: #3c4043; line-height: 1.4; font-weight:500;">{subj['name']}</td>
-                <td style="padding: 16px 20px; text-align: right; white-space: nowrap;">
+            <tr style="border-bottom: 1px solid #F1F3F4;">
+                <td style="padding: 16px 20px; font-size: 0.9em; color: #3C4043; line-height: 1.4; font-weight:500; vertical-align:middle;">{subj['name']}</td>
+                <td style="padding: 16px 20px; text-align: right; white-space: nowrap; vertical-align:middle;">
                     <div style="font-size: 1em; color: {p_color}; font-weight: {p_weight};">{subj['percent']}%</div>
-                    <div style="font-size: 0.75em; color: #70757a; margin-top: 4px; font-weight: 500;">{subj['count']}</div>
+                    <div style="font-size: 0.8em; color: #70757A; margin-top: 4px; font-weight: 500;">{subj['count']}</div>
                 </td>
-                <td style="padding: 16px 20px; text-align: right; white-space: nowrap; width: 90px;">
+                <td style="padding: 16px 20px; text-align: right; white-space: nowrap; width: 90px; vertical-align:middle;">
                     {badge}
                 </td>
             </tr>
@@ -278,29 +278,29 @@ def check_attendance_for_user(user):
 
         subject_line = f"{personality['subject_icon']} {personality['status']}: {final_percent}"
         
-        # Unified Material Card Template
+        # Unified Matte Modern Card Template with updated fonts and softer shadows
         html_body = f"""
-        <div style="background-color: #f1f3f4; padding: 24px 10px; font-family: 'Google Sans', Roboto, 'Segoe UI', Arial, sans-serif;">
-            <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+        <div style="background-color: #F8F9FA; padding: 30px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+            <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.05);">
                 
-                <div style="background-color: {personality['color']}; padding: 40px 20px; text-align: center;">
-                    <h1 style="margin: 0; font-size: 4em; font-weight: 700; color: #ffffff; letter-spacing: -1.5px; line-height: 1;">{final_percent}</h1>
-                    <div style="font-size: 1.3em; font-weight: 600; color: rgba(255,255,255,0.95); margin-top: 12px;">{total_attended} / {total_delivered}</div>
-                    <div style="font-size: 1.05em; color: rgba(255,255,255,0.85); font-weight: 500; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px;">{personality['status']}</div>
+                <div style="background-color: {personality['color']}; padding: 45px 30px; text-align: center;">
+                    <h1 style="margin: 0; font-size: 4.5em; font-weight: 700; color: #ffffff; letter-spacing: -1.5px; line-height: 1;">{final_percent}</h1>
+                    <div style="font-size: 1.4em; font-weight: 600; color: rgba(255,255,255,0.95); margin-top: 12px; letter-spacing: 0.5px;">{total_attended} / {total_delivered}</div>
+                    <div style="font-size: 1.1em; color: rgba(255,255,255,0.85); font-weight: 600; margin-top: 10px; text-transform: uppercase; letter-spacing: 1.2px;">{personality['status']}</div>
                 </div>
 
-                <div style="background-color: #fafafa; padding: 18px 20px; text-align: center; border-bottom: 1px solid #e0e0e0;">
-                    <p style="margin: 0; color: #5f6368; font-style: italic; font-size: 0.95em; font-weight: 500;">
+                <div style="background-color: #FFFFFF; padding: 20px 30px; text-align: center; border-bottom: 1px solid #F1F3F4;">
+                    <p style="margin: 0; color: #5F6368; font-style: italic; font-size: 1em; font-weight: 400; line-height: 1.5;">
                         {personality['subject_icon']} "{personality['quote']}"
                     </p>
                 </div>
 
-                <table style="width: 100%; border-collapse: collapse;">
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
                     <thead>
                         <tr>
-                            <th style="padding: 16px 20px; text-align: left; font-size: 0.75em; text-transform: uppercase; color: #70757a; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid #e0e0e0;">Subject</th>
-                            <th style="padding: 16px 20px; text-align: right; font-size: 0.75em; text-transform: uppercase; color: #70757a; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid #e0e0e0;">Overall</th>
-                            <th style="padding: 16px 20px; text-align: right; font-size: 0.75em; text-transform: uppercase; color: #70757a; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid #e0e0e0;">Yesterday</th>
+                            <th style="padding: 12px 20px; text-align: left; font-size: 0.7em; text-transform: uppercase; color: #9AA0A6; font-weight: 700; letter-spacing: 0.8px;">Subject</th>
+                            <th style="padding: 12px 20px; text-align: right; font-size: 0.7em; text-transform: uppercase; color: #9AA0A6; font-weight: 700; letter-spacing: 0.8px;">Overall</th>
+                            <th style="padding: 12px 20px; text-align: right; font-size: 0.7em; text-transform: uppercase; color: #9AA0A6; font-weight: 700; letter-spacing: 0.8px;">Yesterday</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -308,8 +308,8 @@ def check_attendance_for_user(user):
                     </tbody>
                 </table>
                 
-                <div style="background-color: #ffffff; padding: 16px; text-align: center; font-size: 0.75em; color: #9aa0a6; border-top: 1px solid #e0e0e0;">
-                    NIET Attendance Bot • Material Design Edition
+                <div style="padding: 20px; text-align: center; font-size: 0.75em; color: #BDC1C6; border-top: 1px solid #F1F3F4; background-color: #FFFFFF;">
+                    NIET Attendance Bot • Matte Edition
                 </div>
             </div>
         </div>
@@ -330,7 +330,7 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V9.3 STARTED")
+    print(f"🚀 BOT V9.4 STARTED")
 
     try:
         response = supabase.table("users").select("*").eq("is_active", True).eq("college_id", BETA_TARGET_ID).execute()
