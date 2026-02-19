@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🛡️ BOT V9.2: BULLETPROOF AJAX + MODERN UI EDITION
+# 🛡️ BOT V9.3: MATERIAL DESIGN + MATH RESTORED
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -37,10 +37,10 @@ cipher = Fernet(MASTER_KEY)
 
 def get_personality(percentage):
     p = float(percentage)
-    if p >= 90: return {"quote": "Absolute Legend! 🏆", "status": "Safe", "color": "#388E3C", "subject_icon": "🏆"}
-    elif p >= 75: return {"quote": "You are Safe! ✅", "status": "Safe", "color": "#388E3C", "subject_icon": "✅"}
-    elif p >= 60: return {"quote": "⚠️ Thin ice!", "status": "Low", "color": "#F57C00", "subject_icon": "⚠️"}
-    else: return {"quote": "🚨 DANGER ZONE!", "status": "CRITICAL", "color": "#D32F2F", "subject_icon": "🚨"}
+    if p >= 90: return {"quote": "Absolute Legend! 🏆 Basically living at college.", "status": "Safe Zone", "color": "#1e8e3e", "subject_icon": "🏆"}
+    elif p >= 75: return {"quote": "You are Safe! Keep maintaining this flow.", "status": "On Track", "color": "#1e8e3e", "subject_icon": "✅"}
+    elif p >= 60: return {"quote": "You are on thin ice! Don't skip anymore classes.", "status": "Attendance is Low", "color": "#f29900", "subject_icon": "⚠️"}
+    else: return {"quote": "DANGER ZONE! Run to college immediately!", "status": "Critical Low", "color": "#d93025", "subject_icon": "🚨"}
 
 def send_email_via_api(target_email, subject, html_content):
     print(f"   📧 Sending to {target_email}...")
@@ -86,7 +86,11 @@ def check_attendance_for_user(user):
     wait = WebDriverWait(driver, 30)
     
     final_percent = "N/A"
-    parsed_subjects = [] # 🆕 Store data here first before building HTML
+    parsed_subjects = [] 
+    
+    # 🆕 Math Trackers restored!
+    total_attended = 0
+    total_delivered = 0
     
     yesterday_obj = datetime.now() - timedelta(days=1)
     yesterday_str = yesterday_obj.strftime("%b %d,%Y")
@@ -108,12 +112,10 @@ def check_attendance_for_user(user):
         print("   ⏳ Waiting for Dashboard (home.htm)...")
         wait.until(EC.url_contains("home.htm"))
 
-        # 2. CLICK DASHBOARD WIDGET (Hardened)
+        # 2. CLICK DASHBOARD WIDGET 
         print("   🧭 Scanning Dashboard for Attendance Block...")
-        
-        # We wait for the specific structure of the dashboard to load
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-        time.sleep(1) # Minor stabilization for dynamic dashboard widgets
+        time.sleep(1) 
         
         dash_text = driver.find_element(By.TAG_NAME, "body").text
         
@@ -122,7 +124,6 @@ def check_attendance_for_user(user):
             print(f"   📊 Found Overall Percentage: {final_percent}")
             
             try:
-                # 🛡️ BULLETPROOF FIX 1: Anchor click to Attendance section
                 xpath_query = f"//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'attendance')]/ancestor::*//*[contains(text(),'{final_percent}')]"
                 target = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_query)))
                 driver.execute_script("arguments[0].click();", target)
@@ -142,7 +143,7 @@ def check_attendance_for_user(user):
         print("   ⏳ Waiting for Summary Table...")
         main_table_xpath = "//table[contains(., 'Course Name')]"
         wait.until(EC.presence_of_element_located((By.XPATH, main_table_xpath)))
-        time.sleep(1) # Let DOM settle
+        time.sleep(1)
         
         # 4. START SCRAPING (AJAX Flow)
         target_table = driver.find_element(By.XPATH, main_table_xpath)
@@ -151,11 +152,8 @@ def check_attendance_for_user(user):
         
         print(f"   📋 Scanning {row_count} subjects...")
 
-        grand_total_row = None
-
         for i in range(row_count):
             try:
-                # Re-find main table to avoid stale elements
                 current_table = driver.find_element(By.XPATH, main_table_xpath)
                 current_rows = current_table.find_elements(By.TAG_NAME, "tr")
                 
@@ -171,44 +169,41 @@ def check_attendance_for_user(user):
                 per = cols[-1].text.strip()
 
                 if "Total" in cols[0].text:
-                    grand_total_row = {"name": "GRAND TOTAL", "percent": per, "count": count_text}
-                    continue
+                    continue # Skip the total row, we are calculating it dynamically
+
+                # 🆕 Extract Math for Grand Total
+                try:
+                    parts = count_text.split('/')
+                    if len(parts) == 2:
+                        total_attended += int(parts[0])
+                        total_delivered += int(parts[1])
+                except: pass
 
                 # Default yesterday status
                 y_status = "No Class"
 
-                # ==========================================
-                # 🛡️ THE BULLETPROOF AJAX EXTRACTOR
-                # ==========================================
                 try:
                     link_element = cols[-2].find_element(By.TAG_NAME, "a")
                     driver.execute_script("arguments[0].click();", link_element)
                     
-                    # Prevent regex/XPath failure on weird characters in subject name
                     clean_subj = subj_name.split()[0][:10] if subj_name else ""
-                    
-                    # Wait for specific header to avoid race conditions with old tables
                     detail_header_xpath = f"//*[contains(text(), 'Attendance Details') and contains(text(), '{clean_subj}')]"
                     
                     try:
                         wait.until(EC.presence_of_element_located((By.XPATH, detail_header_xpath)))
                     except:
-                        # Fallback if text matching is too strict
                         detail_header_xpath = "//*[contains(text(), 'Attendance Details')]"
                         wait.until(EC.presence_of_element_located((By.XPATH, detail_header_xpath)))
                     
-                    # Anchor table directly to the header
                     detail_table_xpath = f"({detail_header_xpath}/following::table)[1]"
                     
                     try:
                         detail_table = driver.find_element(By.XPATH, detail_table_xpath)
                     except:
-                        # Final fallback if structure is bizarre
                         all_tables = driver.find_elements(By.TAG_NAME, "table")
                         detail_table = all_tables[-1]
                         
                     detail_rows = detail_table.find_elements(By.TAG_NAME, "tr")
-                    
                     daily_statuses = []
                     
                     for d_row in reversed(detail_rows):
@@ -235,7 +230,6 @@ def check_attendance_for_user(user):
                     print(f"   ⚠️ Details scrape failed for {subj_name}")
                     y_status = "Error"
                 
-                # 🆕 Append clean data to our list
                 parsed_subjects.append({
                     "name": subj_name,
                     "percent": per,
@@ -246,84 +240,76 @@ def check_attendance_for_user(user):
             except Exception as row_e: continue
 
         # ==========================================
-        # 🎨 BUILD MODERN HTML EMAIL
+        # 🎨 BUILD MATERIAL DESIGN HTML EMAIL
         # ==========================================
         try:
             val = float(re.search(r'\d+\.?\d*', final_percent).group())
             personality = get_personality(val)
         except: 
-            personality = {"quote": "Update", "status": "Update", "color": "#1976D2", "subject_icon": "📅"}
+            personality = {"quote": "Attendance Updated", "status": "View Data", "color": "#1976d2", "subject_icon": "📅"}
 
         table_html = ""
         for subj in parsed_subjects:
             # Color Logic
             p_val = float(subj['percent']) if subj['percent'].replace('.','',1).isdigit() else 100
-            p_color = "#d32f2f" if p_val < 75 else "#202124"
-            p_weight = "bold" if p_val < 75 else "600"
+            p_color = "#d93025" if p_val < 75 else "#202124"
+            p_weight = "bold" if p_val < 75 else "500"
 
-            # Badge Logic
+            # Material Badges (Pills)
             if subj['yesterday'] == "Present":
-                badge = "<span style='background-color:#e6f4ea; color:#137333; padding:4px 10px; border-radius:12px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Present</span>"
+                badge = "<span style='background-color:#e6f4ea; color:#137333; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:600; letter-spacing:0.3px; text-transform:uppercase;'>Present</span>"
             elif subj['yesterday'] == "Absent":
-                badge = "<span style='background-color:#fce8e6; color:#c5221f; padding:4px 10px; border-radius:12px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Absent</span>"
+                badge = "<span style='background-color:#fce8e6; color:#c5221f; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:600; letter-spacing:0.3px; text-transform:uppercase;'>Absent</span>"
             else:
                 badge = "<span style='color:#bdc1c6; font-size:1.2em; font-weight:bold;'>-</span>"
 
             table_html += f"""
-            <tr style="border-bottom: 1px solid #f1f3f4;">
-                <td style="padding: 14px 16px; font-size: 0.9em; color: #3c4043; line-height: 1.4;">{subj['name']}</td>
-                <td style="padding: 14px 16px; text-align: right; white-space: nowrap;">
-                    <div style="font-size: 0.95em; color: {p_color}; font-weight: {p_weight};">{subj['percent']}%</div>
-                    <div style="font-size: 0.75em; color: #80868b; margin-top: 2px;">{subj['count']}</div>
+            <tr style="border-bottom: 1px solid #e0e0e0;">
+                <td style="padding: 16px 20px; font-size: 0.9em; color: #3c4043; line-height: 1.4; font-weight:500;">{subj['name']}</td>
+                <td style="padding: 16px 20px; text-align: right; white-space: nowrap;">
+                    <div style="font-size: 1em; color: {p_color}; font-weight: {p_weight};">{subj['percent']}%</div>
+                    <div style="font-size: 0.75em; color: #70757a; margin-top: 4px; font-weight: 500;">{subj['count']}</div>
                 </td>
-                <td style="padding: 14px 16px; text-align: right; white-space: nowrap; width: 80px;">
+                <td style="padding: 16px 20px; text-align: right; white-space: nowrap; width: 90px;">
                     {badge}
                 </td>
             </tr>
             """
 
-        # Add Grand Total Row if it exists
-        if grand_total_row:
-            table_html += f"""
-            <tr style="background-color: #f8f9fa;">
-                <td style="padding: 16px; font-size: 0.9em; color: #202124; font-weight: 700;">{grand_total_row['name']}</td>
-                <td style="padding: 16px; text-align: right; font-size: 0.95em; color: #202124; font-weight: 700;" colspan="2">
-                    {grand_total_row['percent']}% <span style="font-size:0.8em; color:#5f6368; font-weight:normal;">({grand_total_row['count']})</span>
-                </td>
-            </tr>
-            """
-
-        subject_line = f"{personality['subject_icon']} Attendance: {final_percent}"
+        subject_line = f"{personality['subject_icon']} {personality['status']}: {final_percent}"
         
-        # Unified Modern Card Template
+        # Unified Material Card Template
         html_body = f"""
-        <div style="background-color: #f4f6f8; padding: 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-            <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e8eaed;">
+        <div style="background-color: #f1f3f4; padding: 24px 10px; font-family: 'Google Sans', Roboto, 'Segoe UI', Arial, sans-serif;">
+            <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                 
-                <div style="background-color: {personality['color']}; padding: 32px 20px; text-align: center;">
-                    <h1 style="margin: 0; font-size: 3.2em; font-weight: 800; color: #ffffff; letter-spacing: -1px;">{final_percent}</h1>
-                    <p style="margin: 8px 0 0 0; font-size: 1.1em; color: rgba(255,255,255,0.9); font-weight: 500; text-transform: uppercase; letter-spacing: 1px;">{personality['status']}</p>
+                <div style="background-color: {personality['color']}; padding: 40px 20px; text-align: center;">
+                    <h1 style="margin: 0; font-size: 4em; font-weight: 700; color: #ffffff; letter-spacing: -1.5px; line-height: 1;">{final_percent}</h1>
+                    <div style="font-size: 1.3em; font-weight: 600; color: rgba(255,255,255,0.95); margin-top: 12px;">{total_attended} / {total_delivered}</div>
+                    <div style="font-size: 1.05em; color: rgba(255,255,255,0.85); font-weight: 500; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px;">{personality['status']}</div>
                 </div>
 
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                <div style="background-color: #fafafa; padding: 18px 20px; text-align: center; border-bottom: 1px solid #e0e0e0;">
+                    <p style="margin: 0; color: #5f6368; font-style: italic; font-size: 0.95em; font-weight: 500;">
+                        {personality['subject_icon']} "{personality['quote']}"
+                    </p>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse;">
                     <thead>
-                        <tr style="border-bottom: 2px solid #e8eaed;">
-                            <th style="padding: 12px 16px; text-align: left; font-size: 0.75em; text-transform: uppercase; color: #5f6368; font-weight: 600; letter-spacing: 0.5px;">Subject</th>
-                            <th style="padding: 12px 16px; text-align: right; font-size: 0.75em; text-transform: uppercase; color: #5f6368; font-weight: 600; letter-spacing: 0.5px;">Status</th>
-                            <th style="padding: 12px 16px; text-align: right; font-size: 0.75em; text-transform: uppercase; color: #5f6368; font-weight: 600; letter-spacing: 0.5px;">Yesterday</th>
+                        <tr>
+                            <th style="padding: 16px 20px; text-align: left; font-size: 0.75em; text-transform: uppercase; color: #70757a; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid #e0e0e0;">Subject</th>
+                            <th style="padding: 16px 20px; text-align: right; font-size: 0.75em; text-transform: uppercase; color: #70757a; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid #e0e0e0;">Overall</th>
+                            <th style="padding: 16px 20px; text-align: right; font-size: 0.75em; text-transform: uppercase; color: #70757a; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid #e0e0e0;">Yesterday</th>
                         </tr>
                     </thead>
                     <tbody>
                         {table_html}
                     </tbody>
                 </table>
-
-                <div style="padding: 24px 20px; text-align: center; background-color: #ffffff; border-top: 1px solid #e8eaed;">
-                    <p style="margin: 0; color: #5f6368; font-style: italic; font-size: 0.95em;">"{personality['quote']}"</p>
-                </div>
                 
-                <div style="background-color: #f8f9fa; padding: 12px; text-align: center; font-size: 0.7em; color: #9aa0a6; border-top: 1px solid #e8eaed;">
-                    NIET Attendance Bot • Modern Edition
+                <div style="background-color: #ffffff; padding: 16px; text-align: center; font-size: 0.75em; color: #9aa0a6; border-top: 1px solid #e0e0e0;">
+                    NIET Attendance Bot • Material Design Edition
                 </div>
             </div>
         </div>
@@ -344,7 +330,7 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V9.2 STARTED")
+    print(f"🚀 BOT V9.3 STARTED")
 
     try:
         response = supabase.table("users").select("*").eq("is_active", True).eq("college_id", BETA_TARGET_ID).execute()
