@@ -19,11 +19,10 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🚀 BOT V8.11: THE NAVIGATOR (FINAL FIX)
+# 🛡️ BOT V9.1: BULLETPROOF AJAX EDITION
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
-TARGET_URL_PART = "studentCourseFileNew"
 BETA_TARGET_ID = "0231csiot122@niet.co.in" 
 
 # 1. LOAD SECRETS
@@ -109,190 +108,195 @@ def check_attendance_for_user(user):
 
         print("   ⏳ Waiting for Dashboard (home.htm)...")
         wait.until(EC.url_contains("home.htm"))
-        time.sleep(2) # Stabilize DOM
 
-        # ====================================================
-        # 🧭 REAL USER NAVIGATION (The Fix)
-        # ====================================================
-        print("   🧭 Navigating Menu...")
+        # 2. CLICK DASHBOARD WIDGET (Hardened)
+        print("   🧭 Scanning Dashboard for Attendance Block...")
         
-        # 1. Expand "Academic Functions"
-        try:
-            academic_menu = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Academic Functions')]")))
-            driver.execute_script("arguments[0].click();", academic_menu)
-            print("   📂 Expanded 'Academic Functions'")
-            time.sleep(1) # Allow dropdown animation
-        except:
-            print("   ⚠️ Could not click Academic Functions (might be already open or sidebar)")
+        # We wait for the specific structure of the dashboard to load
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        time.sleep(1) # Minor stabilization for dynamic dashboard widgets
+        
+        dash_text = driver.find_element(By.TAG_NAME, "body").text
+        
+        if p_match := re.search(r'(\d+\.\d+)%', dash_text):
+            final_percent = p_match.group(0)
+            print(f"   📊 Found Overall Percentage: {final_percent}")
+            
+            try:
+                # 🛡️ BULLETPROOF FIX 1: Anchor click to Attendance section
+                xpath_query = f"//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'attendance')]/ancestor::*//*[contains(text(),'{final_percent}')]"
+                target = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_query)))
+                driver.execute_script("arguments[0].click();", target)
+            except:
+                print("   ⚠️ Strict widget locator failed. Falling back to text match...")
+                xpath_query = f"//*[contains(text(),'{final_percent}')]"
+                target = driver.find_element(By.XPATH, xpath_query)
+                driver.execute_script("arguments[0].click();", target)
+                
+            try: driver.execute_script("arguments[0].click();", target.find_element(By.XPATH, ".."))
+            except: pass
+        else:
+            print("   ❌ Could not find percentage on dashboard.")
+            return
 
-        # 2. Click "Courses" (or whatever link contains the target href)
-        # We target the href because text might be "Courses", "My Courses", etc.
-        try:
-            target_link = wait.until(EC.element_to_be_clickable((By.XPATH, f"//a[contains(@href,'{TARGET_URL_PART}')]")))
-            driver.execute_script("arguments[0].click();", target_link)
-            print("   🖱️ Clicked Target Link")
-        except Exception as e:
-            print(f"   ❌ Could not find link with href containing '{TARGET_URL_PART}'")
-            raise e
-
-        # 3. Verify Navigation
-        print("   ⏳ Waiting for Page Load...")
-        wait.until(EC.url_contains(TARGET_URL_PART))
-        print("   ✅ Navigation Successful!")
-
-        # 4. WAIT FOR DATA TABLE
-        print("   ⏳ Waiting for Data Table...")
+        # 3. WAIT FOR MAIN ATTENDANCE TABLE
+        print("   ⏳ Waiting for Summary Table...")
         main_table_xpath = "//table[contains(., 'Course Name')]"
         wait.until(EC.presence_of_element_located((By.XPATH, main_table_xpath)))
+        time.sleep(1) # Let DOM settle
         
-        # 5. SCRAPE DATA (Stable V8.5 Logic)
+        # 4. START SCRAPING (AJAX Flow)
         target_table = driver.find_element(By.XPATH, main_table_xpath)
-        table_text = target_table.text
+        initial_rows = target_table.find_elements(By.TAG_NAME, "tr")
+        row_count = len(initial_rows)
         
-        if p_match := re.search(r'(\d+\.\d+)%', table_text):
-            final_percent = p_match.group(0)
-            print(f"   📊 Found Percentage: {final_percent}")
-            
-            initial_rows = target_table.find_elements(By.TAG_NAME, "tr")
-            row_count = len(initial_rows)
-            print(f"   📋 Scanning {row_count} rows...")
+        print(f"   📋 Scanning {row_count} subjects...")
 
-            for i in range(row_count):
-                try:
-                    # RE-FIND TABLE
-                    current_table = driver.find_element(By.XPATH, main_table_xpath)
-                    current_rows = current_table.find_elements(By.TAG_NAME, "tr")
-                    
-                    if i >= len(current_rows): break
-                    row = current_rows[i]
-                    cols = row.find_elements(By.TAG_NAME, "td")
-                    
-                    if len(cols) < 4: continue
-                    subj_name = cols[1].text.strip()
-                    if not subj_name: continue
-                    
-                    if "Total" in cols[0].text:
-                        main_table_rows_html += f"""
-                        <tr style='background-color:#f0f7ff; font-weight:bold; border-top: 2px solid #ddd;'>
-                           <td style='padding:8px 4px; color:#000; font-size:0.9em;'>GRAND TOTAL</td>
-                           <td style='text-align:right; padding:8px 4px; font-size:0.9em;'>{cols[-1].text.strip()}%</td>
-                        </tr>"""
-                        continue
-
-                    count_text = cols[-2].text.strip()
-                    per = cols[-1].text.strip()
-                    
-                    color_style = "color:#333;"
-                    if float(per) < 75: color_style = "color:#D32F2F; font-weight:bold;"
-                    
-                    main_table_rows_html += f"""
-                    <tr style='border-bottom:1px solid #eee;'>
-                        <td style='padding:8px 4px; {color_style}'>{subj_name}</td>
-                        <td style='text-align:right; padding:8px 4px; {color_style}'>
-                            {per}% <span style='font-size:0.8em; color:#999;'>({count_text})</span>
-                        </td>
-                    </tr>"""
-
-                    # CLICK & CHECK YESTERDAY
-                    try:
-                        link_element = cols[-2].find_element(By.TAG_NAME, "a")
-                        driver.execute_script("arguments[0].click();", link_element)
-                        time.sleep(1.5)
-                        
-                        all_tables = driver.find_elements(By.TAG_NAME, "table")
-                        detail_rows = all_tables[-1].find_elements(By.TAG_NAME, "tr")
-                        daily_statuses = []
-                        
-                        for d_row in reversed(detail_rows):
-                            d_cols = d_row.find_elements(By.TAG_NAME, "td")
-                            if len(d_cols) < 5: continue
-                            
-                            d_date_str = d_cols[1].text.strip()
-                            d_stat = d_cols[4].text.strip() 
-                            
-                            if d_date_str == yesterday_str:
-                                if d_stat == "P": daily_statuses.append("P")
-                                else: daily_statuses.append("A")
-                            
-                            try:
-                                current_row_date = datetime.strptime(d_date_str, "%b %d,%Y")
-                                if current_row_date.date() < yesterday_obj.date(): break
-                            except: pass
-                            
-                        if not daily_statuses: yesterday_data[subj_name] = "No Class"
-                        elif all(s == "P" for s in daily_statuses): yesterday_data[subj_name] = "Present"
-                        else: yesterday_data[subj_name] = "Absent"
-                            
-                        # RECOVERY
-                        try:
-                            driver.back()
-                            wait.until(EC.presence_of_element_located((By.XPATH, main_table_xpath)))
-                            time.sleep(0.5)
-                        except:
-                            # If back fails, re-click the exact link to reset
-                            target_link = driver.find_element(By.XPATH, f"//a[contains(@href,'{TARGET_URL_PART}')]")
-                            driver.execute_script("arguments[0].click();", target_link)
-                            wait.until(EC.presence_of_element_located((By.XPATH, main_table_xpath)))
-                        
-                    except Exception:
-                        yesterday_data[subj_name] = "Error"
-                        if TARGET_URL_PART not in driver.current_url: 
-                             driver.find_element(By.XPATH, f"//a[contains(@href,'{TARGET_URL_PART}')]").click()
-                
-                except Exception: continue
-
-            # --- BUILD EMAIL ---
-            yesterday_rows_html = ""
-            for subj, status in yesterday_data.items():
-                bg_color = "transparent"
-                text_color = "#333"
-                if status == "Present": text_color = "#388E3C"
-                elif status == "Absent": text_color = "#D32F2F"; bg_color = "#ffebee"
-                elif status == "No Class": text_color = "#999"
-
-                yesterday_rows_html += f"""
-                <tr>
-                    <td style='padding:6px; font-size:0.85em; color:#555;'>{subj}</td>
-                    <td style='padding:6px; font-size:0.85em; font-weight:bold; text-align:right; color:{text_color}; background:{bg_color}; border-radius:4px;'>{status}</td>
-                </tr>"""
-            
-            if not yesterday_rows_html:
-                yesterday_rows_html = "<tr><td colspan='2' style='text-align:center; color:#999; padding:10px;'>No classes yesterday</td></tr>"
-
+        for i in range(row_count):
             try:
-                val = float(re.search(r'\d+\.?\d*', final_percent).group())
-                personality = get_personality(val)
-            except: 
-                personality = {"quote": "Update", "status": "Update", "color": "#1976D2", "subject_icon": "📅"}
+                # Re-find main table to avoid stale elements
+                current_table = driver.find_element(By.XPATH, main_table_xpath)
+                current_rows = current_table.find_elements(By.TAG_NAME, "tr")
+                
+                if i >= len(current_rows): break
+                row = current_rows[i]
+                cols = row.find_elements(By.TAG_NAME, "td")
+                
+                if len(cols) < 4: continue
+                subj_name = cols[1].text.strip()
+                if not subj_name: continue
+                
+                if "Total" in cols[0].text:
+                    main_table_rows_html += f"""
+                    <tr style='background-color:#f0f7ff; font-weight:bold; border-top: 2px solid #ddd;'>
+                       <td style='padding:8px 4px; color:#000; font-size:0.9em;'>GRAND TOTAL</td>
+                       <td style='text-align:right; padding:8px 4px; font-size:0.9em;'>{cols[-1].text.strip()}%</td>
+                    </tr>"""
+                    continue
 
-            subject_line = f"{personality['subject_icon']} Attendance: {final_percent}"
+                count_text = cols[-2].text.strip()
+                per = cols[-1].text.strip()
+                
+                color_style = "color:#333;"
+                if float(per) < 75: color_style = "color:#D32F2F; font-weight:bold;"
+                
+                main_table_rows_html += f"""
+                <tr style='border-bottom:1px solid #eee;'>
+                    <td style='padding:8px 4px; {color_style}'>{subj_name}</td>
+                    <td style='text-align:right; padding:8px 4px; {color_style}'>
+                        {per}% <span style='font-size:0.8em; color:#999;'>({count_text})</span>
+                    </td>
+                </tr>"""
+
+                # ==========================================
+                # 🛡️ THE BULLETPROOF AJAX EXTRACTOR
+                # ==========================================
+                try:
+                    link_element = cols[-2].find_element(By.TAG_NAME, "a")
+                    driver.execute_script("arguments[0].click();", link_element)
+                    
+                    # Prevent regex/XPath failure on weird characters in subject name
+                    clean_subj = subj_name.split()[0][:10] if subj_name else ""
+                    
+                    # Wait for specific header to avoid race conditions with old tables
+                    detail_header_xpath = f"//*[contains(text(), 'Attendance Details') and contains(text(), '{clean_subj}')]"
+                    
+                    try:
+                        wait.until(EC.presence_of_element_located((By.XPATH, detail_header_xpath)))
+                    except:
+                        # Fallback if text matching is too strict
+                        detail_header_xpath = "//*[contains(text(), 'Attendance Details')]"
+                        wait.until(EC.presence_of_element_located((By.XPATH, detail_header_xpath)))
+                    
+                    # Anchor table directly to the header
+                    detail_table_xpath = f"({detail_header_xpath}/following::table)[1]"
+                    
+                    try:
+                        detail_table = driver.find_element(By.XPATH, detail_table_xpath)
+                    except:
+                        # Final fallback if structure is bizarre
+                        all_tables = driver.find_elements(By.TAG_NAME, "table")
+                        detail_table = all_tables[-1]
+                        
+                    detail_rows = detail_table.find_elements(By.TAG_NAME, "tr")
+                    
+                    daily_statuses = []
+                    
+                    for d_row in reversed(detail_rows):
+                        d_cols = d_row.find_elements(By.TAG_NAME, "td")
+                        if len(d_cols) < 5: continue
+                        
+                        d_date_str = d_cols[1].text.strip()
+                        d_stat = d_cols[4].text.strip() 
+                        
+                        if d_date_str == yesterday_str:
+                            if d_stat == "P": daily_statuses.append("P")
+                            else: daily_statuses.append("A")
+                        
+                        try:
+                            current_row_date = datetime.strptime(d_date_str, "%b %d,%Y")
+                            if current_row_date.date() < yesterday_obj.date(): break
+                        except: pass
+                        
+                    if not daily_statuses: yesterday_data[subj_name] = "No Class"
+                    elif all(s == "P" for s in daily_statuses): yesterday_data[subj_name] = "Present"
+                    else: yesterday_data[subj_name] = "Absent"
+                        
+                except Exception as e:
+                    print(f"   ⚠️ Details scrape failed for {subj_name}: {e}")
+                    yesterday_data[subj_name] = "Error"
             
-            html_body = f"""
-            <div style="font-family:'Segoe UI', sans-serif; max-width:600px; margin:auto; border:1px solid #e0e0e0; border-radius:12px; overflow:hidden;">
-                <div style="background:{personality['color']}; padding:20px; text-align:center; color:white;">
-                    <h1 style="margin:0; font-size:2.5em; font-weight:bold;">{final_percent}</h1>
-                    <p style="margin:5px 0 0 0; font-size:1.2em; opacity:0.9;">{personality['status']}</p>
-                </div>
-                <table style="width:100%; border-collapse:collapse;">
-                    <tr>
-                        <td style="width:60%; vertical-align:top; padding:0; border-right:1px solid #eee;">
-                            <div style="padding:10px; background:#f9f9f9; border-bottom:1px solid #eee; font-weight:bold; color:#555; font-size:0.9em;">CURRENT STATUS</div>
-                            <table style="width:100%; border-collapse:collapse; font-size:0.9em;">{main_table_rows_html}</table>
-                        </td>
-                        <td style="width:40%; vertical-align:top; padding:0; background:#fafafa;">
-                            <div style="padding:10px; background:#eee; border-bottom:1px solid #ddd; font-weight:bold; color:#555; font-size:0.9em;">YESTERDAY ({yesterday_str})</div>
-                            <table style="width:100%; border-collapse:collapse;">{yesterday_rows_html}</table>
-                        </td>
-                    </tr>
-                </table>
-                <div style="padding:15px; text-align:center; background:#fff; border-top:1px solid #eee; font-style:italic; color:#666;">"{personality['quote']}"</div>
-                <div style="background:#f5f5f5; padding:10px; text-align:center; font-size:0.7em; color:#aaa;">Bot V8.11 • Production Ready</div>
-            </div>
-            """
-            send_email_via_api(target_email, subject_line, html_body)
+            except Exception as row_e: continue
 
-        else:
-            print("   ⚠️ Percentage not found in table.")
+        # --- BUILD EMAIL ---
+        yesterday_rows_html = ""
+        for subj, status in yesterday_data.items():
+            bg_color = "transparent"
+            text_color = "#333"
+            if status == "Present": text_color = "#388E3C"
+            elif status == "Absent": text_color = "#D32F2F"; bg_color = "#ffebee"
+            elif status == "No Class": text_color = "#999"
+
+            yesterday_rows_html += f"""
+            <tr>
+                <td style='padding:6px; font-size:0.85em; color:#555;'>{subj}</td>
+                <td style='padding:6px; font-size:0.85em; font-weight:bold; text-align:right; color:{text_color}; background:{bg_color}; border-radius:4px;'>{status}</td>
+            </tr>"""
+        
+        if not yesterday_rows_html:
+            yesterday_rows_html = "<tr><td colspan='2' style='text-align:center; color:#999; padding:10px;'>No classes yesterday</td></tr>"
+
+        try:
+            val = float(re.search(r'\d+\.?\d*', final_percent).group())
+            personality = get_personality(val)
+        except: 
+            personality = {"quote": "Update", "status": "Update", "color": "#1976D2", "subject_icon": "📅"}
+
+        subject_line = f"{personality['subject_icon']} Attendance: {final_percent}"
+        
+        html_body = f"""
+        <div style="font-family:'Segoe UI', sans-serif; max-width:600px; margin:auto; border:1px solid #e0e0e0; border-radius:12px; overflow:hidden;">
+            <div style="background:{personality['color']}; padding:20px; text-align:center; color:white;">
+                <h1 style="margin:0; font-size:2.5em; font-weight:bold;">{final_percent}</h1>
+                <p style="margin:5px 0 0 0; font-size:1.2em; opacity:0.9;">{personality['status']}</p>
+            </div>
+            <table style="width:100%; border-collapse:collapse;">
+                <tr>
+                    <td style="width:60%; vertical-align:top; padding:0; border-right:1px solid #eee;">
+                        <div style="padding:10px; background:#f9f9f9; border-bottom:1px solid #eee; font-weight:bold; color:#555; font-size:0.9em;">CURRENT STATUS</div>
+                        <table style="width:100%; border-collapse:collapse; font-size:0.9em;">{main_table_rows_html}</table>
+                    </td>
+                    <td style="width:40%; vertical-align:top; padding:0; background:#fafafa;">
+                        <div style="padding:10px; background:#eee; border-bottom:1px solid #ddd; font-weight:bold; color:#555; font-size:0.9em;">YESTERDAY ({yesterday_str})</div>
+                        <table style="width:100%; border-collapse:collapse;">{yesterday_rows_html}</table>
+                    </td>
+                </tr>
+            </table>
+            <div style="padding:15px; text-align:center; background:#fff; border-top:1px solid #eee; font-style:italic; color:#666;">"{personality['quote']}"</div>
+            <div style="background:#f5f5f5; padding:10px; text-align:center; font-size:0.7em; color:#aaa;">Bot V9.1 • Stable Release</div>
+        </div>
+        """
+        send_email_via_api(target_email, subject_line, html_body)
 
     except Exception as e:
         print(f"   ❌ FATAL ERROR: {e}")
@@ -307,7 +311,7 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V8.11 STARTED")
+    print(f"🚀 BOT V9.1 STARTED")
 
     try:
         response = supabase.table("users").select("*").eq("is_active", True).eq("college_id", BETA_TARGET_ID).execute()
