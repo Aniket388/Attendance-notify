@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🛡️ BOT V9.5: ARMORED INFRASTRUCTURE EDITION
+# 🛡️ BOT V9.6: ARMORED INFRASTRUCTURE (CLEAN WAIT)
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
@@ -127,11 +127,10 @@ def check_attendance_for_user(user, is_final_attempt=True):
             driver.switch_to.alert.accept()
         except: pass
 
-        # 🛡️ HARDEN DASHBOARD READINESS
+        # 🛡️ HARDEN DASHBOARD READINESS (Structural only)
         print("   ⏳ Waiting for Dashboard (home.htm)...")
         wait.until(EC.url_contains("home.htm"))
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-        wait.until(lambda d: re.search(r'\d+\.\d+%', d.page_source))
         
         # 🛡️ RESET FAILURE TRACKING ON SUCCESSFUL LOGIN
         if current_fails > 0:
@@ -139,11 +138,12 @@ def check_attendance_for_user(user, is_final_attempt=True):
 
         # 2. CLICK DASHBOARD WIDGET 
         print("   🧭 Scanning Dashboard for Attendance Block...")
-        time.sleep(1) 
+        time.sleep(2) # 👈 Let the framework render the widgets naturally
         
         dash_text = driver.find_element(By.TAG_NAME, "body").text
         
-        if p_match := re.search(r'(\d+\.\d+)%', dash_text):
+        # 🛡️ FLEXIBLE REGEX (Handles both 64.29% and 65%)
+        if p_match := re.search(r'(\d+(\.\d+)?)%', dash_text):
             final_percent = p_match.group(0)
             print(f"   📊 Found Overall Percentage: {final_percent}")
             
@@ -372,7 +372,7 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V9.5 STARTED")
+    print(f"🚀 BOT V9.6 STARTED")
 
     try:
         response = supabase.table("users").select("*").eq("is_active", True).eq("college_id", BETA_TARGET_ID).execute()
