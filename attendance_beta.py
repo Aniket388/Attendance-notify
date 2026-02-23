@@ -23,7 +23,7 @@ from googleapiclient.discovery import build
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
-BETA_TARGET_ID = "0231csiot122@niet.co.in"
+BETA_TARGET_ID = "0231csiot122@niet.co.in" 
 
 # 1. LOAD SECRETS
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -66,9 +66,9 @@ def send_email_via_api(target_email, subject, html_content):
 def check_attendance_for_user(user):
     user_id = user['college_id']
     target_email = user['target_email']
-   
+    
     print(f"\n🔄 Processing: {user_id}")
-   
+    
     try:
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
     except:
@@ -86,12 +86,12 @@ def check_attendance_for_user(user):
 
     driver = webdriver.Chrome(options=chrome_options)
     wait = WebDriverWait(driver, 30)
-   
+    
     final_percent = "N/A"
-    parsed_subjects = []
+    parsed_subjects = [] 
     total_attended = 0
     total_delivered = 0
-   
+    
     yesterday_obj = datetime.now() - timedelta(days=1)
     yesterday_str = yesterday_obj.strftime("%b %d,%Y")
 
@@ -99,11 +99,11 @@ def check_attendance_for_user(user):
         # 1. LOGIN
         print("   ⏳ Logging in...")
         driver.get(LOGIN_URL)
-       
+        
         wait.until(EC.visibility_of_element_located((By.ID, "j_username"))).send_keys(user_id)
         driver.find_element(By.ID, "password-1").send_keys(college_pass)
         driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
-       
+        
         try:
             WebDriverWait(driver, 5).until(EC.alert_is_present())
             driver.switch_to.alert.accept()
@@ -112,17 +112,17 @@ def check_attendance_for_user(user):
         print("   ⏳ Waiting for Dashboard (home.htm)...")
         wait.until(EC.url_contains("home.htm"))
 
-        # 2. CLICK DASHBOARD WIDGET
+        # 2. CLICK DASHBOARD WIDGET 
         print("   🧭 Scanning Dashboard for Attendance Block...")
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-        time.sleep(1)
-       
+        time.sleep(1) 
+        
         dash_text = driver.find_element(By.TAG_NAME, "body").text
-       
+        
         if p_match := re.search(r'(\d+\.\d+)%', dash_text):
             final_percent = p_match.group(0)
             print(f"   📊 Found Overall Percentage: {final_percent}")
-           
+            
             try:
                 xpath_query = f"//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'attendance')]/ancestor::*//*[contains(text(),'{final_percent}')]"
                 target = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_query)))
@@ -132,7 +132,7 @@ def check_attendance_for_user(user):
                 xpath_query = f"//*[contains(text(),'{final_percent}')]"
                 target = driver.find_element(By.XPATH, xpath_query)
                 driver.execute_script("arguments[0].click();", target)
-               
+                
             try: driver.execute_script("arguments[0].click();", target.find_element(By.XPATH, ".."))
             except: pass
         else:
@@ -144,31 +144,31 @@ def check_attendance_for_user(user):
         main_table_xpath = "//table[contains(., 'Course Name')]"
         wait.until(EC.presence_of_element_located((By.XPATH, main_table_xpath)))
         time.sleep(1)
-       
+        
         # 4. START SCRAPING (AJAX Flow)
         target_table = driver.find_element(By.XPATH, main_table_xpath)
         initial_rows = target_table.find_elements(By.TAG_NAME, "tr")
         row_count = len(initial_rows)
-       
+        
         print(f"   📋 Scanning {row_count} subjects...")
 
         for i in range(row_count):
             try:
                 current_table = driver.find_element(By.XPATH, main_table_xpath)
                 current_rows = current_table.find_elements(By.TAG_NAME, "tr")
-               
+                
                 if i >= len(current_rows): break
                 row = current_rows[i]
                 cols = row.find_elements(By.TAG_NAME, "td")
-               
+                
                 if len(cols) < 4: continue
                 subj_name = cols[1].text.strip()
                 if not subj_name: continue
-               
+                
                 count_text = cols[-2].text.strip()
                 per = cols[-1].text.strip()
 
-                if "Total" in cols[0].text: continue
+                if "Total" in cols[0].text: continue 
 
                 try:
                     parts = count_text.split('/')
@@ -182,58 +182,58 @@ def check_attendance_for_user(user):
                 try:
                     link_element = cols[-2].find_element(By.TAG_NAME, "a")
                     driver.execute_script("arguments[0].click();", link_element)
-                   
+                    
                     clean_subj = subj_name.split()[0][:10] if subj_name else ""
                     detail_header_xpath = f"//*[contains(text(), 'Attendance Details') and contains(text(), '{clean_subj}')]"
-                   
+                    
                     try:
                         wait.until(EC.presence_of_element_located((By.XPATH, detail_header_xpath)))
                     except:
                         detail_header_xpath = "//*[contains(text(), 'Attendance Details')]"
                         wait.until(EC.presence_of_element_located((By.XPATH, detail_header_xpath)))
-                   
+                    
                     detail_table_xpath = f"({detail_header_xpath}/following::table)[1]"
-                   
+                    
                     try:
                         detail_table = driver.find_element(By.XPATH, detail_table_xpath)
                     except:
                         all_tables = driver.find_elements(By.TAG_NAME, "table")
                         detail_table = all_tables[-1]
-                       
+                        
                     detail_rows = detail_table.find_elements(By.TAG_NAME, "tr")
                     daily_statuses = []
-                   
+                    
                     for d_row in reversed(detail_rows):
                         d_cols = d_row.find_elements(By.TAG_NAME, "td")
                         if len(d_cols) < 5: continue
-                       
+                        
                         d_date_str = d_cols[1].text.strip()
-                        d_stat = d_cols[4].text.strip()
-                       
+                        d_stat = d_cols[4].text.strip() 
+                        
                         if d_date_str == yesterday_str:
                             if d_stat == "P": daily_statuses.append("P")
                             else: daily_statuses.append("A")
-                       
+                        
                         try:
                             current_row_date = datetime.strptime(d_date_str, "%b %d,%Y")
                             if current_row_date.date() < yesterday_obj.date(): break
                         except: pass
-                       
+                        
                     if not daily_statuses: y_status = "No Class"
                     elif all(s == "P" for s in daily_statuses): y_status = "Present"
                     else: y_status = "Absent"
-                       
+                        
                 except Exception as e:
                     print(f"   ⚠️ Details scrape failed for {subj_name}")
                     y_status = "Error"
-               
+                
                 parsed_subjects.append({
                     "name": subj_name,
                     "percent": per,
                     "count": count_text,
                     "yesterday": y_status
                 })
-           
+            
             except Exception as row_e: continue
 
         # ==========================================
@@ -242,7 +242,7 @@ def check_attendance_for_user(user):
         try:
             val = float(re.search(r'\d+\.?\d*', final_percent).group())
             personality = get_personality(val)
-        except:
+        except: 
             personality = {"quote": "Attendance Updated", "status": "View Data", "color": "#1976d2", "subject_icon": "📅"}
 
         table_html = ""
@@ -250,7 +250,7 @@ def check_attendance_for_user(user):
             # Matte Color Logic for low attendance text
             p_val = float(subj['percent']) if subj['percent'].replace('.','',1).isdigit() else 100
             # Use the new matte brick red for low attendance text
-            p_color = "#B94A40" if p_val < 75 else "#3C4043"
+            p_color = "#B94A40" if p_val < 75 else "#3C4043" 
             p_weight = "600" if p_val < 75 else "500"
 
             # Matte Badges (Pills) - Subtle backgrounds, strong matte text
@@ -277,12 +277,12 @@ def check_attendance_for_user(user):
             """
 
         subject_line = f"{personality['subject_icon']} {personality['status']}: {final_percent}"
-       
+        
         # Unified Matte Modern Card Template with updated fonts and softer shadows
         html_body = f"""
         <div style="background-color: #F8F9FA; padding: 30px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
             <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.05);">
-               
+                
                 <div style="background-color: {personality['color']}; padding: 45px 30px; text-align: center;">
                     <h1 style="margin: 0; font-size: 4.5em; font-weight: 700; color: #ffffff; letter-spacing: -1.5px; line-height: 1;">{final_percent}</h1>
                     <div style="font-size: 1.4em; font-weight: 600; color: rgba(255,255,255,0.95); margin-top: 12px; letter-spacing: 0.5px;">{total_attended} / {total_delivered}</div>
@@ -307,20 +307,20 @@ def check_attendance_for_user(user):
                         {table_html}
                     </tbody>
                 </table>
-               
+                
                 <div style="padding: 20px; text-align: center; font-size: 0.75em; color: #BDC1C6; border-top: 1px solid #F1F3F4; background-color: #FFFFFF;">
                     NIET Attendance Bot • Matte Edition
                 </div>
             </div>
         </div>
         """
-       
+        
         send_email_via_api(target_email, subject_line, html_body)
 
     except Exception as e:
         print(f"   ❌ FATAL ERROR: {e}")
         traceback.print_exc()
-       
+        
     finally:
         driver.quit()
 
@@ -342,7 +342,7 @@ def main():
         print(f"   ✅ Found Beta User. Starting...")
         for user in all_users:
             check_attendance_for_user(user)
-           
+            
     except Exception as e:
         print(f"🔥 CRITICAL ERROR: {e}")
 
