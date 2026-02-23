@@ -19,11 +19,11 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🛡️ BOT V9.4: MATTE MODERN UI EDITION
+# 🛡️ BOT V10.0-BETA: ROBUST INFRASTRUCTURE TEST
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
-BETA_TARGET_ID = "0231csiot122@niet.co.in" 
+BETA_TARGET_ID = "0231csiot122@niet.co.in" # 🔒 BETA LOCK ACTIVE
 
 # 1. LOAD SECRETS
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -35,14 +35,19 @@ TOKEN_JSON   = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 cipher = Fernet(MASTER_KEY)
 
-# 🎨 NEW MATTE COLOR PALETTE
+# 🛡️ SAFE CLICK WRAPPER (Robustness)
+def safe_click(driver, element):
+    try:
+        driver.execute_script("arguments[0].click();", element)
+    except:
+        element.click()
+
 def get_personality(percentage):
     p = float(percentage)
-    # Colors updated to sophisticated matte tones
-    if p >= 90: return {"quote": "Absolute Legend! 🏆 Basically living at college.", "status": "Safe Zone", "color": "#3A7D68", "subject_icon": "🏆"} # Matte Deep Sage
-    elif p >= 75: return {"quote": "You are Safe! Keep maintaining this flow.", "status": "On Track", "color": "#3A7D68", "subject_icon": "✅"} # Matte Deep Sage
-    elif p >= 60: return {"quote": "You are on thin ice! Don't skip anymore classes.", "status": "Attendance is Low", "color": "#C27C2E", "subject_icon": "⚠️"} # Matte Burnt Ochre
-    else: return {"quote": "DANGER ZONE! Run to college immediately!", "status": "Critical Low", "color": "#B94A40", "subject_icon": "🚨"} # Matte Brick Red
+    if p >= 90: return {"quote": "Absolute Legend! 🏆 Basically living at college.", "status": "Safe Zone", "color": "#3A7D68", "subject_icon": "🏆"}
+    elif p >= 75: return {"quote": "You are Safe! Keep maintaining this flow.", "status": "On Track", "color": "#3A7D68", "subject_icon": "✅"}
+    elif p >= 60: return {"quote": "You are on thin ice! Don't skip anymore classes.", "status": "Attendance is Low", "color": "#C27C2E", "subject_icon": "⚠️"}
+    else: return {"quote": "DANGER ZONE! Run to college immediately!", "status": "Critical Low", "color": "#B94A40", "subject_icon": "🚨"}
 
 def send_email_via_api(target_email, subject, html_content):
     print(f"   📧 Sending to {target_email}...")
@@ -63,11 +68,14 @@ def send_email_via_api(target_email, subject, html_content):
         print(f"   ❌ API Send Failed: {e}")
         return False
 
-def check_attendance_for_user(user):
+def check_attendance_for_user(user, is_final_attempt=True):
     user_id = user['college_id']
     target_email = user['target_email']
     
-    print(f"\n🔄 Processing: {user_id}")
+    # 🛡️ FAILURE TRACKING (Robustness)
+    current_fails = user.get('fail_count', 0)
+    
+    print(f"\n🔄 Processing: {user_id} (Current Fails: {current_fails})")
     
     try:
         college_pass = cipher.decrypt(user['encrypted_pass'].encode()).decode()
@@ -75,7 +83,7 @@ def check_attendance_for_user(user):
         print("   ❌ Decryption Failed")
         return
 
-    # BROWSER SETUP
+    # 🛡️ DEFENSIVE CHROME OPTIONS (Robustness)
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -83,6 +91,16 @@ def check_attendance_for_user(user):
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    
+    chrome_options.add_argument("--disable-popup-blocking")
+    chrome_options.set_capability("unhandledPromptBehavior", "accept")
+
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.default_content_setting_values.notifications": 2,
+        "profile.managed_default_content_settings.stylesheets": 2,
+    }
+    chrome_options.add_experimental_option("prefs", prefs)
 
     driver = webdriver.Chrome(options=chrome_options)
     wait = WebDriverWait(driver, 30)
@@ -102,42 +120,50 @@ def check_attendance_for_user(user):
         
         wait.until(EC.visibility_of_element_located((By.ID, "j_username"))).send_keys(user_id)
         driver.find_element(By.ID, "password-1").send_keys(college_pass)
-        driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
+        safe_click(driver, driver.find_element(By.CSS_SELECTOR, "button[type='submit']"))
         
         try:
             WebDriverWait(driver, 5).until(EC.alert_is_present())
             driver.switch_to.alert.accept()
         except: pass
 
+        # 🛡️ HARDEN DASHBOARD READINESS (Robustness)
         print("   ⏳ Waiting for Dashboard (home.htm)...")
         wait.until(EC.url_contains("home.htm"))
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        
+        # 🛡️ RESET FAILURE TRACKING ON SUCCESSFUL LOGIN
+        if current_fails > 0:
+            supabase.table("users").update({"fail_count": 0}).eq("college_id", user_id).execute()
 
         # 2. CLICK DASHBOARD WIDGET 
         print("   🧭 Scanning Dashboard for Attendance Block...")
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-        time.sleep(1) 
+        time.sleep(2) 
         
-        dash_text = driver.find_element(By.TAG_NAME, "body").text
+        # 🎯 DETERMINISTIC SCOPING: Only look at the text inside the Attendance widget
+        try:
+            xpath_query = "//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'attendance')]/ancestor::*[contains(., '%')][1]"
+            attendance_widget = wait.until(EC.presence_of_element_located((By.XPATH, xpath_query)))
+            dash_text = attendance_widget.text
+        except Exception:
+            raise Exception("Could not locate the specific Attendance widget container on the dashboard.")
         
-        if p_match := re.search(r'(\d+\.\d+)%', dash_text):
+        # 🛡️ FLEXIBLE REGEX - SCOPED
+        if p_match := re.search(r'(\d+(\.\d+)?)%', dash_text):
             final_percent = p_match.group(0)
-            print(f"   📊 Found Overall Percentage: {final_percent}")
+            print(f"   📊 Found Scoped Percentage: {final_percent}")
             
             try:
-                xpath_query = f"//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'attendance')]/ancestor::*//*[contains(text(),'{final_percent}')]"
-                target = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_query)))
-                driver.execute_script("arguments[0].click();", target)
+                target = attendance_widget.find_element(By.XPATH, f".//*[contains(text(),'{final_percent}')]")
+                safe_click(driver, target) 
             except:
-                print("   ⚠️ Strict widget locator failed. Falling back to text match...")
-                xpath_query = f"//*[contains(text(),'{final_percent}')]"
-                target = driver.find_element(By.XPATH, xpath_query)
-                driver.execute_script("arguments[0].click();", target)
+                print("   ⚠️ Strict locator failed. Clicking widget body...")
+                safe_click(driver, attendance_widget) 
                 
-            try: driver.execute_script("arguments[0].click();", target.find_element(By.XPATH, ".."))
+            try: safe_click(driver, target.find_element(By.XPATH, ".."))
             except: pass
         else:
-            print("   ❌ Could not find percentage on dashboard.")
-            return
+            raise Exception(f"Attendance percentage not found in scoped text: {dash_text}")
 
         # 3. WAIT FOR MAIN ATTENDANCE TABLE
         print("   ⏳ Waiting for Summary Table...")
@@ -181,7 +207,7 @@ def check_attendance_for_user(user):
 
                 try:
                     link_element = cols[-2].find_element(By.TAG_NAME, "a")
-                    driver.execute_script("arguments[0].click();", link_element)
+                    safe_click(driver, link_element) 
                     
                     clean_subj = subj_name.split()[0][:10] if subj_name else ""
                     detail_header_xpath = f"//*[contains(text(), 'Attendance Details') and contains(text(), '{clean_subj}')]"
@@ -247,18 +273,13 @@ def check_attendance_for_user(user):
 
         table_html = ""
         for subj in parsed_subjects:
-            # Matte Color Logic for low attendance text
             p_val = float(subj['percent']) if subj['percent'].replace('.','',1).isdigit() else 100
-            # Use the new matte brick red for low attendance text
             p_color = "#B94A40" if p_val < 75 else "#3C4043" 
             p_weight = "600" if p_val < 75 else "500"
 
-            # Matte Badges (Pills) - Subtle backgrounds, strong matte text
             if subj['yesterday'] == "Present":
-                # Subtle Sage BG, Matte Teal Text
                 badge = "<span style='background-color:#E8F3F0; color:#2E6B58; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Present</span>"
             elif subj['yesterday'] == "Absent":
-                # Subtle Coral BG, Matte Brick Text
                 badge = "<span style='background-color:#F7EBEA; color:#9E3F36; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Absent</span>"
             else:
                 badge = "<span style='color:#9AA0A6; font-size:1.5em; line-height:0.8;'>-</span>"
@@ -278,7 +299,6 @@ def check_attendance_for_user(user):
 
         subject_line = f"{personality['subject_icon']} {personality['status']}: {final_percent}"
         
-        # Unified Matte Modern Card Template with updated fonts and softer shadows
         html_body = f"""
         <div style="background-color: #F8F9FA; padding: 30px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
             <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.05);">
@@ -309,7 +329,7 @@ def check_attendance_for_user(user):
                 </table>
                 
                 <div style="padding: 20px; text-align: center; font-size: 0.75em; color: #BDC1C6; border-top: 1px solid #F1F3F4; background-color: #FFFFFF;">
-                    NIET Attendance Bot • Matte Edition
+                    NIET Attendance Bot • <a href="https://attendance-notify.vercel.app/" style="color:#BDC1C6; text-decoration:underline;">Update Settings</a>
                 </div>
             </div>
         </div>
@@ -320,28 +340,65 @@ def check_attendance_for_user(user):
     except Exception as e:
         print(f"   ❌ FATAL ERROR: {e}")
         traceback.print_exc()
+
+        # 🛡️ SOFT RETRY ESCAPE (Don't log failure if it's going to retry)
+        if not is_final_attempt:
+            raise e 
+
+        # 🛡️ 3-STRIKES FAILURE TRACKING
+        new_fail = current_fails + 1
+
+        if new_fail >= 3:
+            print("   💀 3 Strikes. Deactivating.")
+            supabase.table("users").update({
+                "fail_count": new_fail,
+                "is_active": False
+            }).eq("college_id", user_id).execute()
+
+            send_email_via_api(
+                target_email,
+                "Bot Deactivated",
+                "<h1>Login Failed 3 Times</h1><p>Please update your password on the portal: <a href='https://attendance-notify.vercel.app/'>Update Settings</a>.</p>"
+            )
+        else:
+            supabase.table("users").update({
+                "fail_count": new_fail
+            }).eq("college_id", user_id).execute()
         
     finally:
         driver.quit()
 
 def main():
+    # ⚡ SHARDING / LOAD BALANCING ARGUMENTS
     parser = argparse.ArgumentParser()
-    parser.add_argument("--shard_id", type=int, default=0)
-    parser.add_argument("--total_shards", type=int, default=1)
+    parser.add_argument("--shard_id", type=int, default=0, help="Current Worker ID (0, 1, 2...)")
+    parser.add_argument("--total_shards", type=int, default=1, help="Total number of Workers")
     args = parser.parse_args()
 
-    print(f"🚀 BOT V9.4 STARTED")
+    print(f"🚀 ROBUST BETA TEST STARTED")
 
     try:
+        # 1. FETCH ONLY BETA USER 🔒
         response = supabase.table("users").select("*").eq("is_active", True).eq("college_id", BETA_TARGET_ID).execute()
         all_users = response.data
+        
         if not all_users:
             print(f"   ⚠️ Beta User {BETA_TARGET_ID} not found or inactive.")
             return
 
-        print(f"   ✅ Found Beta User. Starting...")
+        print(f"   ✅ Found Beta User. Starting robust test...")
+        
+        # 3. OUTER SHELL SOFT RETRY FOR EACH USER
         for user in all_users:
-            check_attendance_for_user(user)
+            for attempt in range(2):
+                try:
+                    check_attendance_for_user(user, is_final_attempt=(attempt == 1))
+                    break
+                except Exception as e:
+                    print(f"   🔄 Retry attempt {attempt + 1} for {user['college_id']}")
+                    if attempt == 1:
+                        print(f"   ❌ Final failure for {user['college_id']}")
+                    time.sleep(2)
             
     except Exception as e:
         print(f"🔥 CRITICAL ERROR: {e}")
