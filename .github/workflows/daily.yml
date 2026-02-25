@@ -1,4 +1,4 @@
-name: Daily Attendance Check
+name: Beta Attendance Test (7 Bots)
 
 on:
   workflow_dispatch:
@@ -6,14 +6,11 @@ on:
 jobs:
   check-attendance:
     runs-on: ubuntu-latest
-    
-    # 🚀 PARALLEL STRATEGY (THE MATRIX)
+
     strategy:
-      fail-fast: false  # If one worker fails, don't kill the others!
+      fail-fast: false
       matrix:
-        # We create 4 Workers (0, 1, 2, 3)
-        # This will spin up 4 computers simultaneously
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6]   # 🚀 7 parallel bots
 
     steps:
       - name: Checkout Code
@@ -22,16 +19,21 @@ jobs:
       - name: Install Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'   # ⚠️ Upgrade from 3.9 (EOL warning)
 
       - name: Install Libraries
-        run: pip install selenium webdriver-manager supabase cryptography google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+        run: |
+          pip install selenium webdriver-manager supabase cryptography \
+          google-auth google-auth-oauthlib google-auth-httplib2 \
+          google-api-python-client
 
-      - name: Run Matrix Worker
+      - name: Run Beta Worker
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MASTER_KEY: ${{ secrets.MASTER_KEY }}
           GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
-        # 🃏 THE MAGIC: "I am Shard X out of 4"
-        run: python attendance.py --shard_id ${{ matrix.shard }} --total_shards 4
+        run: |
+          python attendance_beta.py \
+          --shard_id ${{ matrix.shard }} \
+          --total_shards 7
