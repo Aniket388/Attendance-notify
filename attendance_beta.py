@@ -19,11 +19,10 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🛡️ BOT V10.0-BETA: ROBUST INFRASTRUCTURE TEST
+# 🚀 BOT V10.0: PRODUCTION RELEASE (SHARDED)
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
-BETA_TARGET_ID = "0231csiot122@niet.co.in" # 🔒 BETA LOCK ACTIVE
 
 # 1. LOAD SECRETS
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -35,7 +34,7 @@ TOKEN_JSON   = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 cipher = Fernet(MASTER_KEY)
 
-# 🛡️ SAFE CLICK WRAPPER (Robustness)
+# 🛡️ SAFE CLICK WRAPPER
 def safe_click(driver, element):
     try:
         driver.execute_script("arguments[0].click();", element)
@@ -72,7 +71,7 @@ def check_attendance_for_user(user, is_final_attempt=True):
     user_id = user['college_id']
     target_email = user['target_email']
     
-    # 🛡️ FAILURE TRACKING (Robustness)
+    # 🛡️ FAILURE TRACKING
     current_fails = user.get('fail_count', 0)
     
     print(f"\n🔄 Processing: {user_id} (Current Fails: {current_fails})")
@@ -83,7 +82,7 @@ def check_attendance_for_user(user, is_final_attempt=True):
         print("   ❌ Decryption Failed")
         return
 
-    # 🛡️ DEFENSIVE CHROME OPTIONS (Robustness)
+    # 🛡️ DEFENSIVE CHROME OPTIONS
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -127,7 +126,7 @@ def check_attendance_for_user(user, is_final_attempt=True):
             driver.switch_to.alert.accept()
         except: pass
 
-        # 🛡️ HARDEN DASHBOARD READINESS (Robustness)
+        # 🛡️ HARDEN DASHBOARD READINESS
         print("   ⏳ Waiting for Dashboard (home.htm)...")
         wait.until(EC.url_contains("home.htm"))
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
@@ -375,25 +374,27 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1, help="Total number of Workers")
     args = parser.parse_args()
 
-    print(f"🚀 ROBUST BETA TEST STARTED")
+    print(f"🚀 PRODUCTION BOT STARTED: Worker {args.shard_id + 1} of {args.total_shards}")
 
     try:
-        # 1. FETCH ONLY BETA USER 🔒
-        response = supabase.table("users").select("*").eq("is_active", True).eq("college_id", BETA_TARGET_ID).execute()
+        # 1. FETCH ALL ACTIVE USERS (Beta lock removed)
+        response = supabase.table("users").select("*").eq("is_active", True).execute()
         all_users = response.data
         
         if not all_users:
-            print(f"   ⚠️ Beta User {BETA_TARGET_ID} not found or inactive.")
+            print("   ⚠️ No users found in database.")
             return
 
-        print(f"   ✅ Found Beta User. Starting robust test...")
+        # 2. APPLY LOAD BALANCING (Splits users among GitHub Actions)
+        my_users = [u for i, u in enumerate(all_users) if i % args.total_shards == args.shard_id]
+        print(f"📋 Total Active Users: {len(all_users)} | Worker Processing: {len(my_users)}")
         
         # 3. OUTER SHELL SOFT RETRY FOR EACH USER
-        for user in all_users:
+        for user in my_users:
             for attempt in range(2):
                 try:
                     check_attendance_for_user(user, is_final_attempt=(attempt == 1))
-                    break
+                    break # Success, break out of retry loop
                 except Exception as e:
                     print(f"   🔄 Retry attempt {attempt + 1} for {user['college_id']}")
                     if attempt == 1:
