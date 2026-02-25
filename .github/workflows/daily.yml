@@ -1,4 +1,4 @@
-name: Beta Attendance Test (7 Bots)
+name: Dailyattendance
 
 on:
   workflow_dispatch:
