@@ -375,7 +375,7 @@ HTML_PAGE = """
 </div>
 <div class="flex flex-col md:flex-row justify-between items-center border-t border-white/10 pt-8">
 <div class="text-sm text-slate-400 mb-4 md:mb-0">
-                    Currently exclusive to <strong class="text-white">NIET</strong> College. © 2023 Attendance Bot.
+                    Currently exclusive to <strong class="text-white">NIET</strong> College. © 2026 Attendance Bot.
                 </div>
 </div>
 </div>
