@@ -256,8 +256,8 @@ HTML_PAGE = """
 <div class="h-12 w-12 rounded-lg bg-green-500/20 text-green-500 flex items-center justify-center mb-4 border border-green-500/10">
 <span class="material-symbols-outlined text-3xl">mark_email_read</span>
 </div>
-<h3 class="text-2xl font-bold mb-2 text-white">Automated Daily Emails</h3>
-<p class="text-slate-400">Receive a comprehensive report every morning at 8:00 AM. Includes your current percentage, classes attended, and margin for leave.</p>
+<h3 class="text-2xl font-bold mb-2 text-white">Automated Daily Emails & Tension-Free Tracking</h3>
+<p class="text-slate-400">Receive a comprehensive report every morning at 8:00 AM. It includes your current percentage, classes attended, and <strong class="text-white">instantly notifies you if yesterday's attendance was marked</strong> so you never have to panic or manually check the portal again.</p>
 </div>
 <div class="absolute bottom-4 right-4 opacity-20 dark:opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-500">
 <svg fill="none" height="100" viewBox="0 0 200 100" width="200" xmlns="http://www.w3.org/2000/svg">
@@ -308,7 +308,7 @@ HTML_PAGE = """
                 The anxiety of <span class="text-slate-400 line-through decoration-red-500 decoration-4">low attendance</span> shouldn't define your semester.
             </p>
 <p class="text-xl text-slate-500 dark:text-slate-300 leading-relaxed font-light backdrop-blur-sm p-4 rounded-xl">
-                Manually logging into a slow ERP portal every day is tedious. Calculating how many bunks you have left is stressful. We built this tool to make attendance data <span class="text-slate-900 dark:text-white font-semibold">invisible until you need it</span>, and <span class="text-slate-900 dark:text-white font-semibold">loud when you have to act</span>.
+                Manually logging into a slow ERP portal every day is tedious. Calculating how many bunks you have left is stressful. We built this tool to make attendance data <span class="text-slate-900 dark:text-white font-semibold">invisible until you need it</span>. Get the facts—including whether you were marked present yesterday—delivered instantly so you can stay <span class="text-slate-900 dark:text-white font-semibold">tension-free</span>.
             </p>
 </div>
 </section>
