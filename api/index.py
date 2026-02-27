@@ -168,7 +168,7 @@ HTML_PAGE = """
 </h1>
 <div class="h-16 lg:h-20">
 <p class="text-lg text-slate-500 dark:text-slate-300 max-w-lg leading-relaxed typing-container drop-shadow-md">
-<span class="typing-text">Currently exclusive to <strong class="text-white font-black text-xl">NIET</strong> College. Automated insights delivered straight to your inbox.</span>
+<span class="typing-text">Currently exclusive to <strong class="text-white font-black text-xl">NIET</strong> College. Automated attendance insights delivered straight to your inbox with yesterday report.</span>
 </p>
 </div>
 <div class="flex flex-wrap gap-4 mt-4">
