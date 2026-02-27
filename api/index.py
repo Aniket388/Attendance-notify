@@ -249,55 +249,66 @@ HTML_PAGE = """
 <h2 class="text-3xl md:text-4xl font-bold mb-4 text-white">Engineered for Efficiency</h2>
 <p class="text-slate-400 max-w-2xl mx-auto backdrop-blur-sm py-2 rounded-lg">Everything you need to stay on top of your academic requirements without the hassle.</p>
 </div>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[250px]">
-<div class="md:col-span-2 row-span-1 glass-panel bg-surface-dark/50 rounded-xl p-8 border border-slate-700/50 flex flex-col justify-between relative overflow-hidden group hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 hover:bg-surface-dark/80">
-<div class="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[60px] -mr-16 -mt-16 transition-all group-hover:bg-primary/20"></div>
-<div class="relative z-10">
-<div class="h-12 w-12 rounded-lg bg-green-500/20 text-green-500 flex items-center justify-center mb-4 border border-green-500/10">
-<span class="material-symbols-outlined text-3xl">mark_email_read</span>
-</div>
-<h3 class="text-2xl font-bold mb-2 text-white">Automated Daily Emails & Tension-Free Tracking</h3>
-<p class="text-slate-400">Receive a comprehensive report every morning at 8:00 AM. It includes your current percentage, classes attended, and <strong class="text-white">instantly notifies you if yesterday's attendance was marked</strong> so you never have to panic or manually check the portal again.</p>
-</div>
-<div class="absolute bottom-4 right-4 opacity-20 dark:opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-500">
-<svg fill="none" height="100" viewBox="0 0 200 100" width="200" xmlns="http://www.w3.org/2000/svg">
-<path d="M10 80C40 80 50 20 80 20C110 20 120 60 150 60C180 60 190 10 200 10" stroke="currentColor" stroke-linecap="round" stroke-width="4"></path>
-</svg>
-</div>
-</div>
-<div class="glass-panel bg-surface-dark/50 rounded-xl p-8 border border-slate-700/50 flex flex-col justify-center items-center text-center group hover:border-primary/50 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 hover:bg-surface-dark/80">
-<div class="h-14 w-14 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border border-blue-500/10">
-<span class="material-symbols-outlined text-3xl">shield_lock</span>
-</div>
-<h3 class="text-xl font-bold mb-2 text-white">Secure Login</h3>
-<p class="text-sm text-slate-400">AES-256 encryption ensures your credentials are never exposed, even to us.</p>
-</div>
-<div class="glass-panel bg-surface-dark/50 rounded-xl p-8 border border-slate-700/50 flex flex-col justify-center items-center text-center group hover:border-primary/50 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 hover:bg-surface-dark/80">
-<div class="h-14 w-14 rounded-full bg-purple-500/20 text-purple-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border border-purple-500/10">
-<span class="material-symbols-outlined text-3xl">analytics</span>
-</div>
-<h3 class="text-xl font-bold mb-2 text-white">Risk Analysis</h3>
-<p class="text-sm text-slate-400">Color-coded alerts based on attendance thresholds (Red &lt; 75%, Green &gt; 75%).</p>
-</div>
-<div class="md:col-span-2 glass-panel bg-surface-dark/50 rounded-xl p-8 border border-slate-700/50 flex items-center gap-8 relative overflow-hidden hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 hover:bg-surface-dark/80">
-<div class="flex-1 z-10">
-<div class="h-12 w-12 rounded-lg bg-orange-500/20 text-orange-500 flex items-center justify-center mb-4 border border-orange-500/10">
-<span class="material-symbols-outlined text-3xl">dataset</span>
-</div>
-<h3 class="text-2xl font-bold mb-2 text-white">Smart Extraction</h3>
-<p class="text-slate-400">Our bot parses the complex ERP table structure to isolate subject-wise data, delivering only the numbers that matter.</p>
-</div>
-<div class="hidden md:block w-1/3 h-full relative">
-<div class="absolute inset-0 bg-gradient-to-t from-surface-dark to-transparent opacity-50"></div>
-<div class="flex gap-2 items-end h-full pb-4 opacity-50 group-hover:opacity-80 transition-opacity">
-<div class="w-4 bg-slate-600 h-[40%] rounded-t-sm group-hover:h-[50%] transition-all duration-700"></div>
-<div class="w-4 bg-primary h-[80%] rounded-t-sm group-hover:h-[90%] transition-all duration-500"></div>
-<div class="w-4 bg-slate-600 h-[60%] rounded-t-sm group-hover:h-[70%] transition-all duration-1000"></div>
-<div class="w-4 bg-slate-600 h-[30%] rounded-t-sm group-hover:h-[40%] transition-all duration-700"></div>
-<div class="w-4 bg-primary h-[90%] rounded-t-sm group-hover:h-[95%] transition-all duration-300"></div>
-</div>
-</div>
-</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="md:col-span-2 glass-panel bg-surface-dark/50 rounded-xl p-8 border border-slate-700/50 flex flex-col justify-between relative overflow-hidden group hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 hover:bg-surface-dark/80">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[60px] -mr-16 -mt-16 transition-all group-hover:bg-primary/20"></div>
+        <div class="relative z-10">
+            <div class="h-12 w-12 rounded-lg bg-green-500/20 text-green-500 flex items-center justify-center mb-4 border border-green-500/10">
+                <span class="material-symbols-outlined text-3xl">mark_email_read</span>
+            </div>
+            <h3 class="text-2xl font-bold mb-2 text-white">Automated Daily Emails</h3>
+            <p class="text-slate-400">Receive a comprehensive report every morning at 8:00 AM. Includes your current percentage, classes attended, and margin for leave.</p>
+        </div>
+        <div class="absolute bottom-4 right-4 opacity-20 dark:opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-500">
+            <svg fill="none" height="100" viewBox="0 0 200 100" width="200" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 80C40 80 50 20 80 20C110 20 120 60 150 60C180 60 190 10 200 10" stroke="currentColor" stroke-linecap="round" stroke-width="4"></path>
+            </svg>
+        </div>
+    </div>
+
+    <div class="glass-panel bg-surface-dark/50 rounded-xl p-8 border border-slate-700/50 flex flex-col justify-center items-center text-center group hover:border-primary/50 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 hover:bg-surface-dark/80">
+        <div class="h-14 w-14 rounded-full bg-teal-500/20 text-teal-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border border-teal-500/10">
+            <span class="material-symbols-outlined text-3xl">fact_check</span>
+        </div>
+        <h3 class="text-xl font-bold mb-2 text-white">Tension-Free Tracking</h3>
+        <p class="text-sm text-slate-400">Get to know if your attendance was marked yesterday without any daily login tension.</p>
+    </div>
+
+    <div class="glass-panel bg-surface-dark/50 rounded-xl p-8 border border-slate-700/50 flex flex-col justify-center items-center text-center group hover:border-primary/50 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 hover:bg-surface-dark/80">
+        <div class="h-14 w-14 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border border-blue-500/10">
+            <span class="material-symbols-outlined text-3xl">shield_lock</span>
+        </div>
+        <h3 class="text-xl font-bold mb-2 text-white">Secure Login</h3>
+        <p class="text-sm text-slate-400">AES-256 encryption ensures your credentials are never exposed, even to us.</p>
+    </div>
+
+    <div class="glass-panel bg-surface-dark/50 rounded-xl p-8 border border-slate-700/50 flex flex-col justify-center items-center text-center group hover:border-primary/50 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 hover:bg-surface-dark/80">
+        <div class="h-14 w-14 rounded-full bg-purple-500/20 text-purple-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border border-purple-500/10">
+            <span class="material-symbols-outlined text-3xl">analytics</span>
+        </div>
+        <h3 class="text-xl font-bold mb-2 text-white">Risk Analysis</h3>
+        <p class="text-sm text-slate-400">Color-coded alerts based on attendance thresholds (Red &lt; 75%, Green &gt; 75%).</p>
+    </div>
+
+    <div class="md:col-span-3 glass-panel bg-surface-dark/50 rounded-xl p-8 border border-slate-700/50 flex items-center gap-8 relative overflow-hidden hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 hover:bg-surface-dark/80">
+        <div class="flex-1 z-10">
+            <div class="h-12 w-12 rounded-lg bg-orange-500/20 text-orange-500 flex items-center justify-center mb-4 border border-orange-500/10">
+                <span class="material-symbols-outlined text-3xl">dataset</span>
+            </div>
+            <h3 class="text-2xl font-bold mb-2 text-white">Smart Extraction</h3>
+            <p class="text-slate-400">Our bot parses the complex ERP table structure to isolate subject-wise data, delivering only the numbers that matter.</p>
+        </div>
+        <div class="hidden md:block w-1/3 h-full relative">
+            <div class="absolute inset-0 bg-gradient-to-t from-surface-dark to-transparent opacity-50"></div>
+            <div class="flex gap-2 items-end h-full pb-4 opacity-50 group-hover:opacity-80 transition-opacity">
+                <div class="w-4 bg-slate-600 h-[40%] rounded-t-sm group-hover:h-[50%] transition-all duration-700"></div>
+                <div class="w-4 bg-primary h-[80%] rounded-t-sm group-hover:h-[90%] transition-all duration-500"></div>
+                <div class="w-4 bg-slate-600 h-[60%] rounded-t-sm group-hover:h-[70%] transition-all duration-1000"></div>
+                <div class="w-4 bg-slate-600 h-[30%] rounded-t-sm group-hover:h-[40%] transition-all duration-700"></div>
+                <div class="w-4 bg-primary h-[90%] rounded-t-sm group-hover:h-[95%] transition-all duration-300"></div>
+            </div>
+        </div>
+    </div>
 </div>
 </div>
 </section>
