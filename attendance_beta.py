@@ -19,15 +19,14 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🚀 BOT V10.3: CORRECT TABLE TARGETING (BETA LOCK)
+# 🚀 BOT V10.4: FIXED TABLE XPATH + FIXED SHARDING (BETA LOCK)
 # ====================================================
 
 LOGIN_URL      = "https://nietcloud.niet.co.in/login.htm"
 ATTENDANCE_URL = "https://nietcloud.niet.co.in/studentCourses.htm?shwA=%27A0A%27"
 
-# XPath that uniquely identifies the attendance data table
-# (the one whose header row contains the "Course Name" <th>)
-ATT_TABLE_XPATH = "//table[.//th[contains(text(),'Course Name')]]"
+# Works whether the header row uses <th> or <td> (new UI uses <td>)
+ATT_TABLE_XPATH = "//table[.//*[contains(text(),'Course Name')] and .//*[contains(text(),'Attendance Count')]]"
 
 # 1. LOAD SECRETS
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -76,34 +75,28 @@ def send_email_via_api(target_email, subject, html_content):
         return False
 
 # ====================================================
-# 🔥 SCRAPING HELPERS  (v10.3 — correct table XPath)
+# 🔥 SCRAPING HELPERS
 # ====================================================
 
 def open_attendance(driver, wait):
     """
     Navigate directly to the attendance URL.
-    Wait until the *correct* table (header contains 'Course Name') is present
-    AND at least one data row (<tr><td>…</td></tr>) has loaded.
+    Wait for the correct data table — headers may be <th> or <td> on new UI.
     """
     driver.get(ATTENDANCE_URL)
-
-    # Step 1 — table header is present
+    # Table with correct headers is present
     wait.until(EC.presence_of_element_located((By.XPATH, ATT_TABLE_XPATH)))
-
-    # Step 2 — at least one <td> data row is present inside that table
+    # At least one data row inside that table
     wait.until(EC.presence_of_element_located(
         (By.XPATH, ATT_TABLE_XPATH + "//tr[td]")
     ))
-    time.sleep(1)   # let any remaining JS settle
+    time.sleep(1)
 
 
 def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
     """
-    Visit the per-subject detail page, read yesterday's attendance status,
-    then unconditionally return to ATTENDANCE_URL so the next iteration is clean.
-
-    Detail-page column layout (unchanged from old UI):
-        td[1] = Date    td[4] = Status  (P / A)
+    Visit the per-subject detail page, read yesterday's status, then
+    unconditionally return to ATTENDANCE_URL so the next iteration is clean.
     """
     if not detail_url:
         return "No Class"
@@ -112,7 +105,6 @@ def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
         driver.get(detail_url)
         time.sleep(1.5)
 
-        # Find the detail table — prefer one that explicitly says "Attendance Details"
         detail_table = None
         try:
             hdr_xpath = "//*[contains(text(),'Attendance Details')]"
@@ -121,7 +113,6 @@ def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
                 By.XPATH, f"({hdr_xpath}/following::table)[1]"
             )
         except Exception:
-            # Fallback: any table that has both "Date" and "Status" text
             for t in reversed(driver.find_elements(By.TAG_NAME, "table")):
                 if "Date" in t.text and "Status" in t.text:
                     detail_table = t
@@ -135,14 +126,12 @@ def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
             d_cols = d_row.find_elements(By.TAG_NAME, "td")
             if len(d_cols) < 5:
                 continue
-
             d_date_str = d_cols[1].text.strip()
             d_stat     = d_cols[4].text.strip()
 
             if d_date_str == yesterday_str:
                 daily_statuses.append("P" if d_stat == "P" else "A")
 
-            # Once we've passed yesterday there's no point scanning further back
             try:
                 if datetime.strptime(d_date_str, "%b %d,%Y").date() < yesterday_obj.date():
                     break
@@ -158,7 +147,6 @@ def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
         return "Error"
 
     finally:
-        # Always land back on the attendance overview before the next subject
         driver.get(ATTENDANCE_URL)
         wait.until(EC.presence_of_element_located(
             (By.XPATH, ATT_TABLE_XPATH + "//tr[td]")
@@ -183,7 +171,6 @@ def check_attendance_for_user(user, is_final_attempt=True):
         print("   ❌ Decryption Failed")
         return
 
-    # 🛡️ DEFENSIVE CHROME OPTIONS
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -232,7 +219,6 @@ def check_attendance_for_user(user, is_final_attempt=True):
         wait.until(EC.url_contains("home.htm"))
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-        # 🛡️ Reset failure tracking on successful login
         if current_fails > 0:
             supabase.table("users").update({"fail_count": 0}).eq("college_id", user_id).execute()
 
@@ -240,19 +226,17 @@ def check_attendance_for_user(user, is_final_attempt=True):
         print("   🧭 Opening Attendance page (direct URL)...")
         open_attendance(driver, wait)
 
-        # ── 3. PASS 1 — read all rows into plain dicts (no DOM refs kept) ───
-        #    Using the SPECIFIC table XPath so we never grab a nav/layout table.
+        # ── 3. PASS 1 — read all rows into plain dicts ───────────────────────
         print("   📋 Reading attendance table...")
-
         main_table = driver.find_element(By.XPATH, ATT_TABLE_XPATH)
         rows_data  = []
 
         for row in main_table.find_elements(By.TAG_NAME, "tr"):
             cols = row.find_elements(By.TAG_NAME, "td")
 
-            # New-UI column layout (6 columns per data row):
-            #   cols[0] Sr. No. | cols[1] Course Code | cols[2] Course Name
-            #   cols[3] Faculty  | cols[4] Attendance Count | cols[5] Percentage
+            # New-UI data rows have exactly 6 <td> columns:
+            # [0] Sr.No | [1] Course Code | [2] Course Name
+            # [3] Faculty | [4] Attendance Count | [5] Percentage
             if len(cols) != 6:
                 continue
 
@@ -260,11 +244,10 @@ def check_attendance_for_user(user, is_final_attempt=True):
             count_text = cols[4].text.strip()
             per_text   = cols[5].text.strip()
 
-            # Skip blank rows and the footer total row
             if not subj_name:
                 continue
             if "/" not in count_text:
-                continue   # footer row has "376/501"; skip rows without "/"
+                continue  # skip footer / total rows
 
             try:
                 a, d = count_text.split("/")
@@ -273,7 +256,6 @@ def check_attendance_for_user(user, is_final_attempt=True):
             except:
                 pass
 
-            # Grab the href from the blue attendance-count anchor
             detail_url = None
             try:
                 detail_url = cols[4].find_element(By.TAG_NAME, "a").get_attribute("href")
@@ -287,7 +269,6 @@ def check_attendance_for_user(user, is_final_attempt=True):
                 "detail_url": detail_url,
             })
 
-        # Calculate overall percentage from totals (most accurate)
         if total_delivered > 0:
             final_percent = f"{round(total_attended / total_delivered * 100, 2)}%"
 
@@ -296,7 +277,7 @@ def check_attendance_for_user(user, is_final_attempt=True):
         if not rows_data:
             raise Exception("No subject rows found — table may not have loaded correctly.")
 
-        # ── 4. PASS 2 — visit each detail page for yesterday's status ────────
+        # ── 4. PASS 2 — get yesterday's status per subject ───────────────────
         for item in rows_data:
             print(f"   🔍 {item['name']}...")
             y_status = scrape_yesterday(
@@ -310,7 +291,7 @@ def check_attendance_for_user(user, is_final_attempt=True):
                 "yesterday": y_status,
             })
 
-        # ── 5. BUILD & SEND EMAIL (identical to v10.0) ───────────────────────
+        # ── 5. BUILD & SEND EMAIL ─────────────────────────────────────────────
         try:
             val         = float(re.search(r'\d+\.?\d*', final_percent).group())
             personality = get_personality(val)
@@ -397,7 +378,6 @@ def check_attendance_for_user(user, is_final_attempt=True):
         if not is_final_attempt:
             raise e
 
-        # 🛡️ 3-STRIKES FAILURE TRACKING
         new_fail = current_fails + 1
         if new_fail >= 3:
             print("   💀 3 Strikes. Deactivating.")
@@ -428,9 +408,10 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V10.3 STARTED (BETA LOCK) — Worker {args.shard_id + 1} of {args.total_shards}")
+    print(f"🚀 BOT V10.4 STARTED (BETA LOCK) — Worker {args.shard_id + 1} of {args.total_shards}")
 
-    # 🔒 BETA LOCK
+    # 🔒 BETA LOCK — single account, but still respect sharding so only
+    # ONE worker processes it (whichever shard owns index 0)
     BETA_USER = "0231csiot122@niet.co.in"
 
     try:
@@ -440,15 +421,23 @@ def main():
             .eq("college_id", BETA_USER) \
             .execute()
 
-        users = response.data
+        all_users = response.data
 
-        if not users:
+        if not all_users:
             print("   ⚠️ Beta user not found or inactive.")
             return
 
-        print(f"📋 Beta mode — processing 1 user: {BETA_USER}")
+        # ✅ SHARDING APPLIED — same logic as production
+        # With 7 workers: index-0 user → shard_id 0 only. Workers 1-6 print and exit cleanly.
+        my_users = [u for i, u in enumerate(all_users) if i % args.total_shards == args.shard_id]
 
-        for user in users:
+        if not my_users:
+            print(f"   ℹ️ No users assigned to this worker. Exiting cleanly.")
+            return
+
+        print(f"📋 Beta mode — this worker processing: {[u['college_id'] for u in my_users]}")
+
+        for user in my_users:
             for attempt in range(2):
                 try:
                     check_attendance_for_user(user, is_final_attempt=(attempt == 1))
