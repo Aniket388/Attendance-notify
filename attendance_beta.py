@@ -19,11 +19,15 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🚀 BOT V10.2: NEW UI FIX (BETA LOCK)
+# 🚀 BOT V10.3: CORRECT TABLE TARGETING (BETA LOCK)
 # ====================================================
 
-LOGIN_URL       = "https://nietcloud.niet.co.in/login.htm"
-ATTENDANCE_URL  = "https://nietcloud.niet.co.in/studentCourses.htm?shwA=%27A0A%27"
+LOGIN_URL      = "https://nietcloud.niet.co.in/login.htm"
+ATTENDANCE_URL = "https://nietcloud.niet.co.in/studentCourses.htm?shwA=%27A0A%27"
+
+# XPath that uniquely identifies the attendance data table
+# (the one whose header row contains the "Course Name" <th>)
+ATT_TABLE_XPATH = "//table[.//th[contains(text(),'Course Name')]]"
 
 # 1. LOAD SECRETS
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -47,10 +51,10 @@ def safe_click(driver, element):
 
 def get_personality(percentage):
     p = float(percentage)
-    if p >= 90:   return {"quote": "Absolute Legend! 🏆 Basically living at college.",         "status": "Safe Zone",          "color": "#3A7D68", "subject_icon": "🏆"}
-    elif p >= 75: return {"quote": "You are Safe! Keep maintaining this flow.",                 "status": "On Track",           "color": "#3A7D68", "subject_icon": "✅"}
-    elif p >= 60: return {"quote": "You are on thin ice! Don't skip anymore classes.",         "status": "Attendance is Low",  "color": "#C27C2E", "subject_icon": "⚠️"}
-    else:         return {"quote": "DANGER ZONE! Run to college immediately!",                  "status": "Critical Low",       "color": "#B94A40", "subject_icon": "🚨"}
+    if p >= 90:   return {"quote": "Absolute Legend! 🏆 Basically living at college.",        "status": "Safe Zone",         "color": "#3A7D68", "subject_icon": "🏆"}
+    elif p >= 75: return {"quote": "You are Safe! Keep maintaining this flow.",                "status": "On Track",          "color": "#3A7D68", "subject_icon": "✅"}
+    elif p >= 60: return {"quote": "You are on thin ice! Don't skip anymore classes.",        "status": "Attendance is Low", "color": "#C27C2E", "subject_icon": "⚠️"}
+    else:         return {"quote": "DANGER ZONE! Run to college immediately!",                 "status": "Critical Low",      "color": "#B94A40", "subject_icon": "🚨"}
 
 def send_email_via_api(target_email, subject, html_content):
     print(f"   📧 Sending to {target_email}...")
@@ -60,8 +64,8 @@ def send_email_via_api(target_email, subject, html_content):
         service = build('gmail', 'v1', credentials=creds)
         msg = MIMEMultipart("alternative")
         msg['Subject'] = subject
-        msg['From'] = "me"
-        msg['To'] = target_email
+        msg['From']    = "me"
+        msg['To']      = target_email
         msg.attach(MIMEText(html_content, "html", "utf-8"))
         raw_msg = base64.urlsafe_b64encode(msg.as_bytes()).decode()
         service.users().messages().send(userId="me", body={'raw': raw_msg}).execute()
@@ -72,46 +76,52 @@ def send_email_via_api(target_email, subject, html_content):
         return False
 
 # ====================================================
-# 🔥 NEW SCRAPING HELPERS (v10.2 — new UI fix)
+# 🔥 SCRAPING HELPERS  (v10.3 — correct table XPath)
 # ====================================================
 
 def open_attendance(driver, wait):
     """
-    New UI: attendance now lives at a dedicated URL.
-    Direct navigation is more reliable than clicking the dashboard widget.
+    Navigate directly to the attendance URL.
+    Wait until the *correct* table (header contains 'Course Name') is present
+    AND at least one data row (<tr><td>…</td></tr>) has loaded.
     """
     driver.get(ATTENDANCE_URL)
-    # Wait until at least one data row is present
-    wait.until(EC.presence_of_element_located((By.XPATH, "//table//tr[td]")))
-    time.sleep(1)  # let JS finish rendering percentages
+
+    # Step 1 — table header is present
+    wait.until(EC.presence_of_element_located((By.XPATH, ATT_TABLE_XPATH)))
+
+    # Step 2 — at least one <td> data row is present inside that table
+    wait.until(EC.presence_of_element_located(
+        (By.XPATH, ATT_TABLE_XPATH + "//tr[td]")
+    ))
+    time.sleep(1)   # let any remaining JS settle
 
 
 def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
     """
-    New UI: the attendance-count cells are real anchor links that navigate
-    to a detail page. We visit the URL directly, scrape, then return to
-    ATTENDANCE_URL so the next iteration starts clean.
+    Visit the per-subject detail page, read yesterday's attendance status,
+    then unconditionally return to ATTENDANCE_URL so the next iteration is clean.
 
-    Column layout on the detail page (same as before):
-        col[1] = Date   col[4] = Status (P / A)
+    Detail-page column layout (unchanged from old UI):
+        td[1] = Date    td[4] = Status  (P / A)
     """
     if not detail_url:
         return "No Class"
 
     try:
         driver.get(detail_url)
-        time.sleep(1)
+        time.sleep(1.5)
 
-        # Locate the detail table — look for the header first, then the table after it
+        # Find the detail table — prefer one that explicitly says "Attendance Details"
         detail_table = None
         try:
-            header_xpath = "//*[contains(text(), 'Attendance Details')]"
-            wait.until(EC.presence_of_element_located((By.XPATH, header_xpath)))
+            hdr_xpath = "//*[contains(text(),'Attendance Details')]"
+            wait.until(EC.presence_of_element_located((By.XPATH, hdr_xpath)))
             detail_table = driver.find_element(
-                By.XPATH, f"({header_xpath}/following::table)[1]"
+                By.XPATH, f"({hdr_xpath}/following::table)[1]"
             )
         except Exception:
-            # Fallback: any table that contains Date + Status columns
+            # Fallback: any table that has both "Date" and "Status" text
             for t in reversed(driver.find_elements(By.TAG_NAME, "table")):
                 if "Date" in t.text and "Status" in t.text:
                     detail_table = t
@@ -132,7 +142,7 @@ def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
             if d_date_str == yesterday_str:
                 daily_statuses.append("P" if d_stat == "P" else "A")
 
-            # Stop scanning once we've passed yesterday's date
+            # Once we've passed yesterday there's no point scanning further back
             try:
                 if datetime.strptime(d_date_str, "%b %d,%Y").date() < yesterday_obj.date():
                     break
@@ -148,9 +158,11 @@ def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
         return "Error"
 
     finally:
-        # Always return to the attendance overview so the next subject starts clean
+        # Always land back on the attendance overview before the next subject
         driver.get(ATTENDANCE_URL)
-        wait.until(EC.presence_of_element_located((By.XPATH, "//table//tr[td]")))
+        wait.until(EC.presence_of_element_located(
+            (By.XPATH, ATT_TABLE_XPATH + "//tr[td]")
+        ))
         time.sleep(0.8)
 
 
@@ -159,8 +171,8 @@ def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
 # ====================================================
 
 def check_attendance_for_user(user, is_final_attempt=True):
-    user_id      = user['college_id']
-    target_email = user['target_email']
+    user_id       = user['college_id']
+    target_email  = user['target_email']
     current_fails = user.get('fail_count', 0)
 
     print(f"\n🔄 Processing: {user_id} (Current Fails: {current_fails})")
@@ -185,7 +197,7 @@ def check_attendance_for_user(user, is_final_attempt=True):
     chrome_options.add_argument("--disable-popup-blocking")
     chrome_options.set_capability("unhandledPromptBehavior", "accept")
     chrome_options.add_experimental_option("prefs", {
-        "profile.managed_default_content_settings.images":    2,
+        "profile.managed_default_content_settings.images":      2,
         "profile.default_content_setting_values.notifications": 2,
         "profile.managed_default_content_settings.stylesheets": 2,
     })
@@ -193,16 +205,16 @@ def check_attendance_for_user(user, is_final_attempt=True):
     driver = webdriver.Chrome(options=chrome_options)
     wait   = WebDriverWait(driver, 30)
 
-    final_percent    = "N/A"
-    parsed_subjects  = []
-    total_attended   = 0
-    total_delivered  = 0
+    final_percent   = "N/A"
+    parsed_subjects = []
+    total_attended  = 0
+    total_delivered = 0
 
     yesterday_obj = datetime.now() - timedelta(days=1)
     yesterday_str = yesterday_obj.strftime("%b %d,%Y")
 
     try:
-        # ── 1. LOGIN ────────────────────────────────────────────────────────
+        # ── 1. LOGIN ─────────────────────────────────────────────────────────
         print("   ⏳ Logging in...")
         driver.get(LOGIN_URL)
 
@@ -216,7 +228,7 @@ def check_attendance_for_user(user, is_final_attempt=True):
         except:
             pass
 
-        print("   ⏳ Waiting for Dashboard (home.htm)...")
+        print("   ⏳ Waiting for Dashboard...")
         wait.until(EC.url_contains("home.htm"))
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
@@ -224,49 +236,40 @@ def check_attendance_for_user(user, is_final_attempt=True):
         if current_fails > 0:
             supabase.table("users").update({"fail_count": 0}).eq("college_id", user_id).execute()
 
-        # ── 2. NAVIGATE DIRECTLY TO ATTENDANCE PAGE (new UI) ────────────────
-        print("   🧭 Opening Attendance page...")
+        # ── 2. OPEN ATTENDANCE PAGE ──────────────────────────────────────────
+        print("   🧭 Opening Attendance page (direct URL)...")
         open_attendance(driver, wait)
 
-        # ── 3. PASS 1 — collect all row data + detail hrefs ─────────────────
-        #    Extract everything into plain Python dicts BEFORE clicking anything.
-        #    This prevents StaleElementReferenceException caused by navigations.
+        # ── 3. PASS 1 — read all rows into plain dicts (no DOM refs kept) ───
+        #    Using the SPECIFIC table XPath so we never grab a nav/layout table.
         print("   📋 Reading attendance table...")
 
-        main_table = driver.find_element(By.XPATH, "//table")
+        main_table = driver.find_element(By.XPATH, ATT_TABLE_XPATH)
         rows_data  = []
 
         for row in main_table.find_elements(By.TAG_NAME, "tr"):
             cols = row.find_elements(By.TAG_NAME, "td")
-            if len(cols) < 6:
-                continue  # skip header / footer / malformed rows
 
-            # New UI column layout:
-            #   cols[0] = Sr. No.
-            #   cols[1] = Course Code
-            #   cols[2] = Course Name   ← subject name
-            #   cols[3] = Faculty Name
-            #   cols[4] = Attendance Count  (e.g. "25/31")  ← blue link
-            #   cols[5] = Percentage        (e.g. "80.65")
+            # New-UI column layout (6 columns per data row):
+            #   cols[0] Sr. No. | cols[1] Course Code | cols[2] Course Name
+            #   cols[3] Faculty  | cols[4] Attendance Count | cols[5] Percentage
+            if len(cols) != 6:
+                continue
+
             subj_name  = cols[2].text.strip()
             count_text = cols[4].text.strip()
             per_text   = cols[5].text.strip()
 
-            if not subj_name or "Course Name" in subj_name:
-                continue  # skip header rows
+            # Skip blank rows and the footer total row
+            if not subj_name:
+                continue
+            if "/" not in count_text:
+                continue   # footer row has "376/501"; skip rows without "/"
 
-            # Running totals
             try:
                 a, d = count_text.split("/")
-                total_attended  += int(a)
-                total_delivered += int(d)
-            except:
-                pass
-
-            # Track the overall percentage for the hero card
-            try:
-                if float(per_text) and final_percent == "N/A":
-                    pass  # will be set from footer row below
+                total_attended  += int(a.strip())
+                total_delivered += int(d.strip())
             except:
                 pass
 
@@ -284,33 +287,22 @@ def check_attendance_for_user(user, is_final_attempt=True):
                 "detail_url": detail_url,
             })
 
-        # Grab the overall percentage from the footer row (last tr with a total)
-        try:
-            footer_rows = main_table.find_elements(By.TAG_NAME, "tr")
-            for fr in reversed(footer_rows):
-                fcols = fr.find_elements(By.TAG_NAME, "td")
-                if len(fcols) >= 6:
-                    candidate = fcols[5].text.strip()
-                    if re.match(r'^\d+(\.\d+)?$', candidate):
-                        final_percent = candidate + "%"
-                        break
-                elif len(fcols) == 2:
-                    # Some themes put "376/501  75.05" in a colspan footer
-                    candidate = fcols[-1].text.strip()
-                    if re.match(r'^\d+(\.\d+)?$', candidate):
-                        final_percent = candidate + "%"
-                        break
-        except:
-            pass
+        # Calculate overall percentage from totals (most accurate)
+        if total_delivered > 0:
+            final_percent = f"{round(total_attended / total_delivered * 100, 2)}%"
 
         print(f"   📊 Overall: {final_percent} | Subjects found: {len(rows_data)}")
+
+        if not rows_data:
+            raise Exception("No subject rows found — table may not have loaded correctly.")
 
         # ── 4. PASS 2 — visit each detail page for yesterday's status ────────
         for item in rows_data:
             print(f"   🔍 {item['name']}...")
-            y_status = scrape_yesterday(driver, wait, item["detail_url"], yesterday_str, yesterday_obj)
+            y_status = scrape_yesterday(
+                driver, wait, item["detail_url"], yesterday_str, yesterday_obj
+            )
             print(f"      → {y_status}")
-
             parsed_subjects.append({
                 "name":      item["name"],
                 "percent":   item["percent"],
@@ -318,13 +310,15 @@ def check_attendance_for_user(user, is_final_attempt=True):
                 "yesterday": y_status,
             })
 
-        # ── 5. BUILD & SEND EMAIL (unchanged from v10.0) ────────────────────
+        # ── 5. BUILD & SEND EMAIL (identical to v10.0) ───────────────────────
         try:
             val         = float(re.search(r'\d+\.?\d*', final_percent).group())
             personality = get_personality(val)
         except:
-            personality = {"quote": "Attendance Updated", "status": "View Data",
-                           "color": "#1976d2", "subject_icon": "📅"}
+            personality = {
+                "quote": "Attendance Updated", "status": "View Data",
+                "color": "#1976d2",            "subject_icon": "📅"
+            }
 
         table_html = ""
         for subj in parsed_subjects:
@@ -333,9 +327,13 @@ def check_attendance_for_user(user, is_final_attempt=True):
             p_weight = "600"     if p_val < 75 else "500"
 
             if subj['yesterday'] == "Present":
-                badge = "<span style='background-color:#E8F3F0; color:#2E6B58; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Present</span>"
+                badge = ("<span style='background-color:#E8F3F0; color:#2E6B58; padding:6px 12px;"
+                         " border-radius:16px; font-size:0.75em; font-weight:700;"
+                         " letter-spacing:0.3px; text-transform:uppercase;'>Present</span>")
             elif subj['yesterday'] == "Absent":
-                badge = "<span style='background-color:#F7EBEA; color:#9E3F36; padding:6px 12px; border-radius:16px; font-size:0.75em; font-weight:700; letter-spacing:0.3px; text-transform:uppercase;'>Absent</span>"
+                badge = ("<span style='background-color:#F7EBEA; color:#9E3F36; padding:6px 12px;"
+                         " border-radius:16px; font-size:0.75em; font-weight:700;"
+                         " letter-spacing:0.3px; text-transform:uppercase;'>Absent</span>")
             else:
                 badge = "<span style='color:#9AA0A6; font-size:1.5em; line-height:0.8;'>-</span>"
 
@@ -357,7 +355,7 @@ def check_attendance_for_user(user, is_final_attempt=True):
         html_body = f"""
         <div style="background-color: #F8F9FA; padding: 30px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
             <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.05);">
-                
+
                 <div style="background-color: {personality['color']}; padding: 45px 30px; text-align: center;">
                     <h1 style="margin: 0; font-size: 4.5em; font-weight: 700; color: #ffffff; letter-spacing: -1.5px; line-height: 1;">{final_percent}</h1>
                     <div style="font-size: 1.4em; font-weight: 600; color: rgba(255,255,255,0.95); margin-top: 12px; letter-spacing: 0.5px;">{total_attended} / {total_delivered}</div>
@@ -382,7 +380,7 @@ def check_attendance_for_user(user, is_final_attempt=True):
                         {table_html}
                     </tbody>
                 </table>
-                
+
                 <div style="padding: 20px; text-align: center; font-size: 0.75em; color: #BDC1C6; border-top: 1px solid #F1F3F4; background-color: #FFFFFF;">
                     NIET Attendance Bot • <a href="https://attendance-notify.vercel.app/" style="color:#BDC1C6; text-decoration:underline;">Update Settings</a>
                 </div>
@@ -430,9 +428,9 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V10.2 STARTED (BETA LOCK) — Worker {args.shard_id + 1} of {args.total_shards}")
+    print(f"🚀 BOT V10.3 STARTED (BETA LOCK) — Worker {args.shard_id + 1} of {args.total_shards}")
 
-    # 🔒 BETA LOCK — only process this one account until UI fix is confirmed
+    # 🔒 BETA LOCK
     BETA_USER = "0231csiot122@niet.co.in"
 
     try:
