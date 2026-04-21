@@ -19,13 +19,12 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🚀 BOT V10.4: FIXED TABLE XPATH + FIXED SHARDING (BETA LOCK)
+# 🚀 BOT V10.5: WIDGET CLICK NAVIGATION + FIXED XPATH
 # ====================================================
 
-LOGIN_URL      = "https://nietcloud.niet.co.in/login.htm"
-ATTENDANCE_URL = "https://nietcloud.niet.co.in/studentCourses.htm?shwA=%27A0A%27"
+LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 
-# Works whether the header row uses <th> or <td> (new UI uses <td>)
+# XPath for the attendance data table — works whether headers are <th> or <td>
 ATT_TABLE_XPATH = "//table[.//*[contains(text(),'Course Name')] and .//*[contains(text(),'Attendance Count')]]"
 
 # 1. LOAD SECRETS
@@ -75,31 +74,84 @@ def send_email_via_api(target_email, subject, html_content):
         return False
 
 # ====================================================
-# 🔥 SCRAPING HELPERS
+# 🔥 SCRAPING HELPERS (V10.5)
 # ====================================================
 
 def open_attendance(driver, wait):
     """
-    Navigate directly to the attendance URL.
-    Wait for the correct data table — headers may be <th> or <td> on new UI.
+    Clicks the attendance widget on the dashboard (required by the server —
+    direct URL navigation does not cause the table to render).
+    Primary:  click the % text inside the Attendance card.
+    Fallback: click SYLLABUS sidebar link → Attendance tab.
+    Then waits for studentCourses.htm to load and the data table to appear.
     """
-    driver.get(ATTENDANCE_URL)
-    # Table with correct headers is present
+    time.sleep(2)  # let dashboard JS settle
+
+    navigated = False
+
+    # ── PRIMARY: click the dashboard attendance widget (same as V10.0) ──
+    try:
+        xpath_widget = (
+            "//*[contains(translate(text(),"
+            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),"
+            "'attendance')]/ancestor::*[contains(.,('%'))][1]"
+        )
+        widget = wait.until(EC.presence_of_element_located((By.XPATH, xpath_widget)))
+
+        # try clicking the percentage number inside the widget first
+        pct_match = re.search(r'(\d+\.?\d*)%', widget.text)
+        if pct_match:
+            try:
+                pct_el = widget.find_element(
+                    By.XPATH, f".//*[contains(text(),'{pct_match.group(0)}')]"
+                )
+                safe_click(driver, pct_el)
+                navigated = True
+            except:
+                pass
+
+        if not navigated:
+            safe_click(driver, widget)
+            navigated = True
+
+    except Exception as e:
+        print(f"   ⚠️ Widget click failed ({e}), trying SYLLABUS sidebar...")
+
+    # ── FALLBACK: SYLLABUS sidebar → Attendance tab ──────────────────────
+    if not navigated or "studentCourses" not in driver.current_url:
+        try:
+            safe_click(driver, wait.until(EC.element_to_be_clickable(
+                (By.XPATH, "//*[contains(text(),'SYLLABUS') or contains(text(),'Syllabus')]")
+            )))
+            time.sleep(1)
+            safe_click(driver, wait.until(EC.element_to_be_clickable(
+                (By.XPATH, "//*[text()='Attendance' or text()='ATTENDANCE']")
+            )))
+        except Exception as e:
+            print(f"   ⚠️ Fallback navigation failed ({e})")
+
+    # ── WAIT FOR THE NEW PAGE AND TABLE ──────────────────────────────────
+    # New UI navigates to studentCourses.htm — wait for that URL
+    wait.until(EC.url_contains("studentCourses"))
+    print(f"   ✅ On attendance page: {driver.current_url}")
+
+    # Wait for the correct data table (headers can be th or td)
     wait.until(EC.presence_of_element_located((By.XPATH, ATT_TABLE_XPATH)))
-    # At least one data row inside that table
-    wait.until(EC.presence_of_element_located(
-        (By.XPATH, ATT_TABLE_XPATH + "//tr[td]")
-    ))
+    # Wait for at least one data row inside it
+    wait.until(EC.presence_of_element_located((By.XPATH, ATT_TABLE_XPATH + "//tr[td]")))
     time.sleep(1)
 
 
 def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
     """
-    Visit the per-subject detail page, read yesterday's status, then
-    unconditionally return to ATTENDANCE_URL so the next iteration is clean.
+    Visits the per-subject detail page, scrapes yesterday's status,
+    then navigates back so the next subject starts clean.
     """
     if not detail_url:
         return "No Class"
+
+    # Remember where we came from so we can return
+    overview_url = driver.current_url
 
     try:
         driver.get(detail_url)
@@ -147,10 +199,9 @@ def scrape_yesterday(driver, wait, detail_url, yesterday_str, yesterday_obj):
         return "Error"
 
     finally:
-        driver.get(ATTENDANCE_URL)
-        wait.until(EC.presence_of_element_located(
-            (By.XPATH, ATT_TABLE_XPATH + "//tr[td]")
-        ))
+        # Return to the attendance overview for the next subject
+        driver.get(overview_url)
+        wait.until(EC.presence_of_element_located((By.XPATH, ATT_TABLE_XPATH + "//tr[td]")))
         time.sleep(0.8)
 
 
@@ -222,8 +273,8 @@ def check_attendance_for_user(user, is_final_attempt=True):
         if current_fails > 0:
             supabase.table("users").update({"fail_count": 0}).eq("college_id", user_id).execute()
 
-        # ── 2. OPEN ATTENDANCE PAGE ──────────────────────────────────────────
-        print("   🧭 Opening Attendance page (direct URL)...")
+        # ── 2. CLICK TO ATTENDANCE PAGE (widget or sidebar) ──────────────────
+        print("   🧭 Navigating to Attendance page...")
         open_attendance(driver, wait)
 
         # ── 3. PASS 1 — read all rows into plain dicts ───────────────────────
@@ -234,9 +285,9 @@ def check_attendance_for_user(user, is_final_attempt=True):
         for row in main_table.find_elements(By.TAG_NAME, "tr"):
             cols = row.find_elements(By.TAG_NAME, "td")
 
-            # New-UI data rows have exactly 6 <td> columns:
-            # [0] Sr.No | [1] Course Code | [2] Course Name
-            # [3] Faculty | [4] Attendance Count | [5] Percentage
+            # New UI: exactly 6 <td> per data row
+            # [0] Sr.No  [1] Course Code  [2] Course Name
+            # [3] Faculty  [4] Attendance Count  [5] Percentage
             if len(cols) != 6:
                 continue
 
@@ -275,9 +326,9 @@ def check_attendance_for_user(user, is_final_attempt=True):
         print(f"   📊 Overall: {final_percent} | Subjects found: {len(rows_data)}")
 
         if not rows_data:
-            raise Exception("No subject rows found — table may not have loaded correctly.")
+            raise Exception("No subject rows found — table did not load correctly.")
 
-        # ── 4. PASS 2 — get yesterday's status per subject ───────────────────
+        # ── 4. PASS 2 — yesterday's status per subject ───────────────────────
         for item in rows_data:
             print(f"   🔍 {item['name']}...")
             y_status = scrape_yesterday(
@@ -408,10 +459,9 @@ def main():
     parser.add_argument("--total_shards", type=int, default=1)
     args = parser.parse_args()
 
-    print(f"🚀 BOT V10.4 STARTED (BETA LOCK) — Worker {args.shard_id + 1} of {args.total_shards}")
+    print(f"🚀 BOT V10.5 STARTED (BETA LOCK) — Worker {args.shard_id + 1} of {args.total_shards}")
 
-    # 🔒 BETA LOCK — single account, but still respect sharding so only
-    # ONE worker processes it (whichever shard owns index 0)
+    # 🔒 BETA LOCK
     BETA_USER = "0231csiot122@niet.co.in"
 
     try:
@@ -427,8 +477,7 @@ def main():
             print("   ⚠️ Beta user not found or inactive.")
             return
 
-        # ✅ SHARDING APPLIED — same logic as production
-        # With 7 workers: index-0 user → shard_id 0 only. Workers 1-6 print and exit cleanly.
+        # ✅ SHARDING — only one worker processes the single beta user
         my_users = [u for i, u in enumerate(all_users) if i % args.total_shards == args.shard_id]
 
         if not my_users:
