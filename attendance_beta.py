@@ -19,10 +19,11 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # ====================================================
-# 🚀 BOT V10.0: PRODUCTION RELEASE (SHARDED)
+# 🚀 BOT V10.1-BETA: UI FIX TEST
 # ====================================================
 
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
+BETA_TARGET_ID = "0231csiot122@niet.co.in" # 🔒 BETA LOCK ACTIVE
 
 # 1. LOAD SECRETS
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -186,14 +187,17 @@ def check_attendance_for_user(user, is_final_attempt=True):
                 row = current_rows[i]
                 cols = row.find_elements(By.TAG_NAME, "td")
                 
-                if len(cols) < 4: continue
-                subj_name = cols[1].text.strip()
-                if not subj_name: continue
+                # Table structure changed: Ensure enough columns exist
+                if len(cols) < 5: continue
+                
+                # 🛠️ UI FIX: Course Name shifted to index 2 (Course Code is now index 1)
+                subj_name = cols[2].text.strip()
+                
+                # Skip if empty (like the bottom Total row) or contains 'Total'
+                if not subj_name or "Total" in cols[0].text: continue
                 
                 count_text = cols[-2].text.strip()
                 per = cols[-1].text.strip()
-
-                if "Total" in cols[0].text: continue 
 
                 try:
                     parts = count_text.split('/')
@@ -368,29 +372,24 @@ def check_attendance_for_user(user, is_final_attempt=True):
         driver.quit()
 
 def main():
-    # ⚡ SHARDING / LOAD BALANCING ARGUMENTS
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--shard_id", type=int, default=0, help="Current Worker ID (0, 1, 2...)")
-    parser.add_argument("--total_shards", type=int, default=1, help="Total number of Workers")
-    args = parser.parse_args()
-
-    print(f"🚀 PRODUCTION BOT STARTED: Worker {args.shard_id + 1} of {args.total_shards}")
+    print("🚀 BETA BOT STARTED: STRICT LOCK ACTIVE")
 
     try:
-        # 1. FETCH ALL ACTIVE USERS (Beta lock removed)
-        response = supabase.table("users").select("*").eq("is_active", True).execute()
-        all_users = response.data
+        # 1. 🔒 BETA LOCK: FETCH ONLY SPECIFIC USER
+        response = supabase.table("users").select("*").eq("college_id", BETA_TARGET_ID).eq("is_active", True).execute()
+        my_users = response.data
         
-        if not all_users:
-            print("   ⚠️ No users found in database.")
+        if not my_users:
+            print(f"   ⚠️ Beta user {BETA_TARGET_ID} not found or inactive in database.")
             return
 
-        # 2. APPLY LOAD BALANCING (Splits users among GitHub Actions)
-        my_users = [u for i, u in enumerate(all_users) if i % args.total_shards == args.shard_id]
-        print(f"📋 Total Active Users: {len(all_users)} | Worker Processing: {len(my_users)}")
+        print(f"📋 Running in BETA MODE. Processing {len(my_users)} user.")
         
-        # 3. OUTER SHELL SOFT RETRY FOR EACH USER
+        # 2. OUTER SHELL SOFT RETRY FOR BETA USER
         for user in my_users:
+            # Force the email to go ONLY to this account to prevent accidents during testing
+            user['target_email'] = BETA_TARGET_ID 
+            
             for attempt in range(2):
                 try:
                     check_attendance_for_user(user, is_final_attempt=(attempt == 1))
@@ -400,7 +399,7 @@ def main():
                     if attempt == 1:
                         print(f"   ❌ Final failure for {user['college_id']}")
                     time.sleep(2)
-            
+        
     except Exception as e:
         print(f"🔥 CRITICAL ERROR: {e}")
 
