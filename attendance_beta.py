@@ -1,5 +1,5 @@
 """
-Attendance bot - BETA (V11.0)
+Attendance bot - BETA (V11.1)
 
 BETA LOCK: only processes BETA_USER and only ever emails BETA_RECIPIENT.
 
@@ -13,6 +13,7 @@ What changed vs V10.5
 - Exit code is non-zero when something failed, so the GitHub run turns red.
 - "Yesterday" uses India time (Asia/Kolkata) instead of the runner's UTC.
 - Multiple fallbacks for opening the attendance page from the dashboard.
+- Portal maintenance / downtime is detected and skipped quietly (no retries, no strikes, no email).
 """
 import os
 import re
@@ -43,7 +44,7 @@ from googleapiclient.discovery import build
 # ----------------------------------------------------------------------------
 # CONFIG
 # ----------------------------------------------------------------------------
-BOT_VERSION = "V11.0"
+BOT_VERSION = "V11.1"
 LOGIN_URL = "https://nietcloud.niet.co.in/login.htm"
 HOME_URL = "https://nietcloud.niet.co.in/home.htm"
 IST = ZoneInfo("Asia/Kolkata")
@@ -81,6 +82,38 @@ class LayoutError(Exception):
     """The portal looks different from what the bot expects."""
 
 
+class SiteDownError(Exception):
+    """The portal is down / under maintenance. Not our fault, not the user's: skip quietly."""
+
+
+DOWN_RE = re.compile(
+    r"(down for maintenance|under maintenance|maintenance mode|temporarily unavailable|"
+    r"service unavailable|bad gateway|gateway time-?out|be right back)",
+    re.I,
+)
+
+
+def site_down_title(driver):
+    """Strong, cheap signal: the page <title> says the site is down."""
+    try:
+        return bool(DOWN_RE.search(driver.title or ""))
+    except Exception:
+        return False
+
+
+def is_site_down(driver):
+    """Title or the first lines of the page say the site is down (only used after something already failed)."""
+    if site_down_title(driver):
+        return True
+    try:
+        body = driver.execute_script(
+            "return document.body ? (document.body.innerText || '').slice(0, 600) : ''"
+        ) or ""
+        return bool(DOWN_RE.search(body))
+    except Exception:
+        return False
+
+
 # ----------------------------------------------------------------------------
 # SETUP
 # ----------------------------------------------------------------------------
@@ -116,7 +149,7 @@ def make_driver():
 # ----------------------------------------------------------------------------
 # EMAIL
 # ----------------------------------------------------------------------------
-def send_email_via_api(target_email, subject, html_content):
+def send_email_via_api(target_email, subject, html_content, text_content=None):
     if BETA_LOCK and (target_email or "").strip().lower() != BETA_RECIPIENT:
         print(f"   🔒 BETA LOCK: refusing to email {target_email!r}")
         return False
@@ -128,6 +161,8 @@ def send_email_via_api(target_email, subject, html_content):
         msg["Subject"] = subject
         msg["From"] = "me"
         msg["To"] = target_email
+        if text_content:
+            msg.attach(MIMEText(text_content, "plain", "utf-8"))
         msg.attach(MIMEText(html_content, "html", "utf-8"))
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
         service.users().messages().send(userId="me", body={"raw": raw}).execute()
@@ -163,78 +198,277 @@ def get_personality(percentage):
         return {"quote": "DANGER ZONE! Run to college immediately!", "status": "Critical Low", "color": "#B94A40", "subject_icon": "🚨"}
 
 
-def build_email(overall, attended, delivered, subjects):
-    """Same look as V10.5. Returns (subject_line, html_body)."""
-    final_percent = "N/A" if overall is None else f"{overall}%"
-    personality = get_personality(overall)
+# ----------------------------------------------------------------------------
+# EMAIL DESIGN
+# ----------------------------------------------------------------------------
+TARGET = 75                 # attendance requirement (%): drawn as the marker on every bar
+SHOW_TARGET_NOTES = True    # "Can miss N more" / "Attend next N to reach 75%" under each subject
 
-    table_html = ""
-    for subj in subjects:
-        if subj["total"] == 0:
-            p_color, p_weight, p_txt = "#9AA0A6", "500", "–"
-        else:
-            p_color = "#B94A40" if subj["percent"] < 75 else "#3C4043"
-            p_weight = "600" if subj["percent"] < 75 else "500"
-            p_txt = f"{subj['percent']:.2f}%"
+FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif"
+INK, MUTED, FAINT, HAIR = "#0F172A", "#6B7280", "#9CA3AF", "#EEF0F3"
 
-        if subj["yesterday"] == "Present":
-            badge = ("<span style='background-color:#E8F3F0; color:#2E6B58; padding:6px 12px;"
-                     " border-radius:16px; font-size:0.75em; font-weight:700;"
-                     " letter-spacing:0.3px; text-transform:uppercase;'>Present</span>")
-        elif subj["yesterday"] == "Absent":
-            badge = ("<span style='background-color:#F7EBEA; color:#9E3F36; padding:6px 12px;"
-                     " border-radius:16px; font-size:0.75em; font-weight:700;"
-                     " letter-spacing:0.3px; text-transform:uppercase;'>Absent</span>")
-        else:
-            badge = "<span style='color:#9AA0A6; font-size:1.5em; line-height:0.8;'>-</span>"
+_EMAIL_CSS = """
+body{margin:0;padding:0;}
+table{border-collapse:collapse;}
+img{border:0;}
+@media only screen and (max-width:620px){
+  .container{width:100%!important;}
+  .pad{padding-left:20px!important;padding-right:20px!important;}
+  .hero-num{font-size:56px!important;line-height:60px!important;}
+  .tile-val{font-size:19px!important;}
+}
+"""
 
-        count_txt = f"{subj['present']}/{subj['total']}"
-        table_html += f"""
-        <tr style="border-bottom: 1px solid #F1F3F4;">
-            <td style="padding: 16px 20px; font-size: 0.9em; color: #3C4043; line-height: 1.4; font-weight:500; vertical-align:middle;">{html.escape(subj['name'])}</td>
-            <td style="padding: 16px 20px; text-align: right; white-space: nowrap; vertical-align:middle;">
-                <div style="font-size: 1em; color: {p_color}; font-weight: {p_weight};">{p_txt}</div>
-                <div style="font-size: 0.8em; color: #70757A; margin-top: 4px; font-weight: 500;">{count_txt}</div>
-            </td>
-            <td style="padding: 16px 20px; text-align: right; white-space: nowrap; width: 90px; vertical-align:middle;">
-                {badge}
-            </td>
-        </tr>
-        """
 
-    subject_line = f"{personality['subject_icon']} {personality['status']}: {final_percent}"
-    html_body = f"""
-    <div style="background-color: #F8F9FA; padding: 30px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-        <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.05);">
-            <div style="background-color: {personality['color']}; padding: 45px 30px; text-align: center;">
-                <h1 style="margin: 0; font-size: 4.5em; font-weight: 700; color: #ffffff; letter-spacing: -1.5px; line-height: 1;">{final_percent}</h1>
-                <div style="font-size: 1.4em; font-weight: 600; color: rgba(255,255,255,0.95); margin-top: 12px; letter-spacing: 0.5px;">{attended} / {delivered}</div>
-                <div style="font-size: 1.1em; color: rgba(255,255,255,0.85); font-weight: 600; margin-top: 10px; text-transform: uppercase; letter-spacing: 1.2px;">{personality['status']}</div>
-            </div>
-            <div style="background-color: #FFFFFF; padding: 20px 30px; text-align: center; border-bottom: 1px solid #F1F3F4;">
-                <p style="margin: 0; color: #5F6368; font-style: italic; font-size: 1em; font-weight: 400; line-height: 1.5;">
-                    {personality['subject_icon']} "{personality['quote']}"
-                </p>
-            </div>
-            <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                <thead>
-                    <tr>
-                        <th style="padding: 12px 20px; text-align: left; font-size: 0.7em; text-transform: uppercase; color: #9AA0A6; font-weight: 700; letter-spacing: 0.8px;">Subject</th>
-                        <th style="padding: 12px 20px; text-align: right; font-size: 0.7em; text-transform: uppercase; color: #9AA0A6; font-weight: 700; letter-spacing: 0.8px;">Overall</th>
-                        <th style="padding: 12px 20px; text-align: right; font-size: 0.7em; text-transform: uppercase; color: #9AA0A6; font-weight: 700; letter-spacing: 0.8px;">Yesterday</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {table_html}
-                </tbody>
-            </table>
-            <div style="padding: 20px; text-align: center; font-size: 0.75em; color: #BDC1C6; border-top: 1px solid #F1F3F4; background-color: #FFFFFF;">
-                NIET Attendance Bot • <a href="https://attendance-notify.vercel.app/" style="color:#BDC1C6; text-decoration:underline;">Update Settings</a>
-            </div>
-        </div>
-    </div>
+def _tone(pct):
+    """Status band for a percentage: label, message, colours (ink = on white, glow = on dark)."""
+    if pct is None:
+        return dict(label="No data", msg="No classes have been recorded yet.",
+                    ink="#475569", glow="#94A3B8", soft="#F1F5F9")
+    if pct >= 90:
+        return dict(label="Excellent", msg=f"Comfortably above the {TARGET}% requirement.",
+                    ink="#15803D", glow="#34D399", soft="#ECFDF3")
+    if pct >= TARGET:
+        return dict(label="On track", msg=f"Above the {TARGET}% requirement. Keep the momentum.",
+                    ink="#15803D", glow="#34D399", soft="#ECFDF3")
+    if pct >= 60:
+        return dict(label="At risk", msg=f"Below the {TARGET}% requirement. Avoid further absences.",
+                    ink="#B45309", glow="#FBBF24", soft="#FFF7E6")
+    return dict(label="Critical", msg=f"Well below the {TARGET}% requirement. Immediate attention needed.",
+                ink="#B42318", glow="#F87171", soft="#FEF3F2")
+
+
+def classes_to_target(present, total, target=TARGET):
     """
-    return subject_line, html_body
+    ('need', n): attend the next n classes in a row to reach `target`%.
+    ('spare', n): can miss n more classes and stay at/above `target`%.
+    None when there are no classes or the target is 0/100.
+    """
+    if total <= 0 or not 0 < target < 100:
+        return None
+    if present * 100 >= target * total:
+        return ("spare", (100 * present - target * total) // target)
+    need = -(-(target * total - 100 * present) // (100 - target))   # ceil
+    return ("need", need)
+
+
+def _target_note(present, total):
+    r = classes_to_target(present, total)
+    if r is None:
+        return ""
+    kind, n = r
+    if kind == "need":
+        return f"Attend the next {n} class{'es' if n != 1 else ''} to reach {TARGET}%"
+    if n == 0:
+        return f"At the {TARGET}% limit. Don't miss the next class"
+    return f"Can miss {n} more class{'es' if n != 1 else ''}"
+
+
+def _bar(pct, fill, track, tick, height=6, radius=3):
+    """Progress bar built from table cells (works in Gmail/Outlook/Apple Mail) with a marker at TARGET%."""
+    p = max(0.0, min(100.0, float(pct)))
+    t = float(TARGET)
+    if p < t:
+        segs = [(p, fill), (t - p, track), ("tick", tick), (100 - t, track)]
+    else:
+        segs = [(t, fill), ("tick", tick), (p - t, fill), (100 - p, track)]
+    cells = ""
+    for w, color in segs:
+        if w == "tick":
+            cells += (f'<td width="2" style="width:2px;height:{height}px;line-height:{height}px;'
+                      f'font-size:0;background-color:{color};">&nbsp;</td>')
+        elif w > 0.05:
+            cells += (f'<td width="{w:.2f}%" style="width:{w:.2f}%;height:{height}px;line-height:{height}px;'
+                      f'font-size:0;background-color:{color};">&nbsp;</td>')
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            f'style="width:100%;border-collapse:separate;border-radius:{radius}px;overflow:hidden;"><tr>{cells}</tr></table>')
+
+
+def _pill(status):
+    if status == "Present":
+        return (f"<span style=\"display:inline-block;padding:5px 11px;border-radius:999px;background-color:#E7F6EC;"
+                f"color:#166534;font-family:{FONT};font-size:10.5px;font-weight:700;letter-spacing:.8px;\">PRESENT</span>")
+    if status == "Absent":
+        return (f"<span style=\"display:inline-block;padding:5px 11px;border-radius:999px;background-color:#FDECEA;"
+                f"color:#B42318;font-family:{FONT};font-size:10.5px;font-weight:700;letter-spacing:.8px;\">ABSENT</span>")
+    if status == "No Class":
+        return f"<span style=\"font-family:{FONT};font-size:12px;color:{FAINT};\">No class</span>"
+    return f"<span style=\"font-family:{FONT};font-size:14px;color:#D1D5DB;\">&ndash;</span>"
+
+
+def _plural(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def _subject_row(s):
+    tone = _tone(s["percent"])
+    code = (s.get("code") or "").strip()
+    if norm(code) == norm(s["name"]):
+        code = ""
+    caption = " &middot; ".join(
+        x for x in (html.escape(code),
+                    html.escape(_target_note(s["present"], s["total"])) if SHOW_TARGET_NOTES else "") if x
+    )
+    caption_html = (f'<div style="font-size:12px;line-height:18px;color:{MUTED};margin-top:2px;">{caption}</div>'
+                    if caption else "")
+    bar = _bar(s["percent"], tone["glow"] if s["percent"] >= TARGET else tone["ink"], "#E9ECF1", INK)
+    return f"""
+    <tr><td class="pad" style="padding:20px 32px 0 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;"><tr>
+        <td valign="top" style="font-family:{FONT};">
+          <div style="font-size:14.5px;line-height:20px;font-weight:600;color:{INK};">{html.escape(s['name'])}</div>
+          {caption_html}
+        </td>
+        <td valign="top" align="center" width="92" style="text-align:center;padding:0 8px;">{_pill(s.get('yesterday', '-'))}</td>
+        <td valign="top" align="right" width="86" style="text-align:right;font-family:{FONT};">
+          <div style="font-size:17px;line-height:22px;font-weight:700;color:{tone['ink']};letter-spacing:-.2px;">{s['percent']:.2f}%</div>
+          <div style="font-size:12px;line-height:18px;color:{MUTED};">{s['present']} / {s['total']}</div>
+        </td>
+      </tr>
+      <tr><td colspan="3" style="padding-top:12px;">{bar}</td></tr></table>
+    </td></tr>
+    <tr><td class="pad" style="padding:20px 32px 0 32px;"><div style="height:1px;line-height:1px;font-size:0;background-color:{HAIR};">&nbsp;</div></td></tr>"""
+
+
+def _yesterday_summary(subjects):
+    """(headline, colour) for the 'Yesterday' tile."""
+    pres = sum(1 for s in subjects if s.get("yesterday") == "Present")
+    absn = sum(1 for s in subjects if s.get("yesterday") == "Absent")
+    unk = sum(1 for s in subjects if s.get("total", 0) > 0 and s.get("yesterday") not in ("Present", "Absent", "No Class"))
+    if absn:
+        return f"{absn} absent", "#B42318"
+    if pres:
+        return "All present", "#15803D"
+    if unk:
+        return "Unavailable", MUTED
+    return "No classes", MUTED
+
+
+def build_email(overall, attended, delivered, subjects, day=None):
+    """High-end HTML email. Returns (subject_line, html_document)."""
+    now = datetime.now(IST)
+    tone = _tone(overall)
+    overall_txt = "N/A" if overall is None else f"{overall:.2f}"
+    day_label = day.strftime("%a, %d %b") if day else "Yesterday"
+    missed = max(0, delivered - attended)
+    y_head, y_color = _yesterday_summary(subjects)
+
+    active = [s for s in subjects if s["total"] > 0]
+    idle = [s for s in subjects if s["total"] == 0]
+    rows = "".join(_subject_row(s) for s in active)
+    if idle:
+        rows += f"""
+    <tr><td class="pad" style="padding:26px 32px 0 32px;font-family:{FONT};font-size:10.5px;font-weight:700;letter-spacing:1.4px;color:{FAINT};">NOT STARTED YET</td></tr>"""
+        for s in idle:
+            rows += f"""
+    <tr><td class="pad" style="padding:10px 32px 0 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;"><tr>
+        <td style="font-family:{FONT};font-size:13px;line-height:19px;color:{MUTED};">{html.escape(s['name'])}</td>
+        <td align="right" style="text-align:right;font-family:{FONT};font-size:12px;color:{FAINT};white-space:nowrap;padding-left:12px;">No classes held</td>
+      </tr></table>
+    </td></tr>"""
+
+    hero_bar = (_bar(overall, tone["glow"], "#26354F", "#FFFFFF", height=8, radius=4) if overall is not None else "")
+    hero_bar_block = f"""
+        <div style="margin-top:26px;">{hero_bar}</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin-top:8px;"><tr>
+          <td style="font-family:{FONT};font-size:11.5px;color:#94A3B8;">Your attendance</td>
+          <td align="right" style="text-align:right;font-family:{FONT};font-size:11.5px;color:#94A3B8;">Target {TARGET}%</td>
+        </tr></table>""" if overall is not None else ""
+
+    def tile(label, value, color, caption, first=False):
+        border = "" if first else f"border-left:1px solid {HAIR};"
+        return f"""
+        <td width="33%" align="center" valign="top" style="text-align:center;width:33.33%;padding:20px 8px;{border}font-family:{FONT};">
+          <div style="font-size:10.5px;font-weight:700;letter-spacing:1.3px;color:{FAINT};">{label}</div>
+          <div class="tile-val" style="white-space:nowrap;font-size:22px;line-height:30px;font-weight:700;color:{color};margin-top:6px;letter-spacing:-.3px;">{value}</div>
+          <div style="font-size:11.5px;line-height:16px;color:{MUTED};margin-top:2px;">{caption}</div>
+        </td>"""
+
+    tiles = (tile("ATTENDED", attended, INK, "classes", first=True)
+             + tile("MISSED", missed, INK, "classes")
+             + tile("YESTERDAY", y_head, y_color, html.escape(day_label)))
+
+    preheader = (f"{overall_txt}{'' if overall is None else '%'} overall &middot; {attended} of {delivered} classes "
+                 f"&middot; Yesterday: {y_head.lower()}")
+    subject_line = f"{get_personality(overall)['subject_icon']} {get_personality(overall)['status']}: " \
+                   f"{'N/A' if overall is None else str(overall) + '%'}"
+
+    doc = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<title>Attendance report</title><style>{_EMAIL_CSS}</style></head>
+<body style="margin:0;padding:0;background-color:#F3F4F6;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{preheader}&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#F3F4F6" style="width:100%;background-color:#F3F4F6;"><tr><td style="padding:32px 12px;text-align:left;">
+  <table role="presentation" class="container" width="600" align="center" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;margin:0 auto;">
+
+    <tr><td style="padding:0 6px 16px 6px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;"><tr>
+        <td>
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td width="28" height="28" align="center" bgcolor="{INK}" style="width:28px;height:28px;background-color:{INK};border-radius:8px;color:#FFFFFF;font-family:{FONT};font-size:13px;line-height:28px;font-weight:700;text-align:center;">N</td>
+            <td style="padding-left:10px;font-family:{FONT};font-size:13px;font-weight:600;color:#111827;letter-spacing:.2px;">NIET Attendance</td>
+          </tr></table>
+        </td>
+        <td align="right" style="text-align:right;font-family:{FONT};font-size:12px;color:{MUTED};">{now.strftime('%a, %d %b %Y')}</td>
+      </tr></table>
+    </td></tr>
+
+    <tr><td>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#FFFFFF" style="width:100%;background-color:#FFFFFF;border:1px solid #E5E7EB;border-radius:16px;border-collapse:separate;overflow:hidden;">
+
+        <tr><td class="pad" bgcolor="#0B1220" style="background-color:#0B1220;background-image:linear-gradient(160deg,#0B1220 0%,#16223D 100%);padding:34px 32px 30px 32px;border-radius:15px 15px 0 0;">
+          <div style="font-family:{FONT};font-size:11px;font-weight:700;letter-spacing:1.8px;color:#94A3B8;">OVERALL ATTENDANCE</div>
+          <div class="hero-num" style="font-family:{FONT};font-size:68px;line-height:72px;font-weight:700;color:#FFFFFF;letter-spacing:-2.5px;margin-top:10px;">{overall_txt}<span style="font-size:30px;line-height:30px;letter-spacing:0;font-weight:600;color:#94A3B8;">{'' if overall is None else '%'}</span></div>
+          <div style="margin-top:14px;">
+            <span style="display:inline-block;padding:5px 12px;border-radius:999px;background-color:#1A2742;border:1px solid #2B3C61;font-family:{FONT};font-size:12px;font-weight:600;color:{tone['glow']};letter-spacing:.3px;">&#9679;&nbsp; {tone['label']}</span>
+            <span style="font-family:{FONT};font-size:13.5px;color:#CBD5E1;padding-left:10px;">{attended} of {delivered} classes attended</span>
+          </div>{hero_bar_block}
+          <div style="font-family:{FONT};font-size:13px;line-height:20px;color:#94A3B8;margin-top:18px;">{html.escape(tone['msg'])}</div>
+        </td></tr>
+
+        <tr><td style="border-bottom:1px solid {HAIR};">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;"><tr>{tiles}</tr></table>
+        </td></tr>
+
+        <tr><td class="pad" style="padding:28px 32px 0 32px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;"><tr>
+            <td style="font-family:{FONT};font-size:11px;font-weight:700;letter-spacing:1.8px;color:{INK};">SUBJECT BREAKDOWN</td>
+            <td width="92" align="center" style="text-align:center;width:92px;padding:0 8px;font-family:{FONT};font-size:10.5px;font-weight:700;letter-spacing:1.2px;color:{FAINT};">YESTERDAY</td>
+            <td width="86" align="right" style="text-align:right;width:86px;font-family:{FONT};font-size:10.5px;font-weight:700;letter-spacing:1.2px;color:{FAINT};">OVERALL</td>
+          </tr></table>
+        </td></tr>
+        {rows}
+        <tr><td style="height:28px;line-height:28px;font-size:0;">&nbsp;</td></tr>
+      </table>
+    </td></tr>
+
+    <tr><td align="center" style="text-align:center;padding:22px 12px 0 12px;font-family:{FONT};font-size:11.5px;line-height:18px;color:{FAINT};">
+      Based on the records published on the college portal &middot; {now.strftime('%d %b %Y, %I:%M %p')} IST<br>
+      NIET Attendance Bot &middot; Beta {BOT_VERSION} &middot; <a href="https://attendance-notify.vercel.app/" style="color:{MUTED};text-decoration:underline;">Update settings</a>
+    </td></tr>
+
+  </table>
+</td></tr></table>
+</body></html>"""
+    return subject_line, doc
+
+
+def build_plain(overall, attended, delivered, subjects, day=None):
+    """Plain-text twin of the email (better deliverability and notification previews)."""
+    head = "N/A" if overall is None else f"{overall:.2f}%"
+    lines = [f"OVERALL ATTENDANCE: {head}  ({attended} of {delivered} classes)", ""]
+    for s in subjects:
+        if s["total"] == 0:
+            lines.append(f"- {s['name']}: no classes held yet")
+        else:
+            y = s.get("yesterday", "-")
+            lines.append(f"- {s['name']}: {s['percent']:.2f}% ({s['present']}/{s['total']})"
+                         + (f" | {day.strftime('%d %b') if day else 'Yesterday'}: {y}" if y not in ("-", "Unknown") else ""))
+    lines += ["", f"NIET Attendance Bot - Beta {BOT_VERSION}"]
+    return "\n".join(lines)
 
 
 # ----------------------------------------------------------------------------
@@ -529,6 +763,8 @@ def describe_page(driver):
 # ----------------------------------------------------------------------------
 def login(driver, user_id, password):
     driver.get(LOGIN_URL)
+    if site_down_title(driver):
+        raise SiteDownError(f"Portal says: {driver.title!r}")
     try:
         user_el = find_first(driver, USERNAME_SELECTORS, 30)
         pass_el = find_first(driver, PASSWORD_SELECTORS, 10)
@@ -708,8 +944,9 @@ def run_once(driver, user, password, recipient):
     delivered = sum(s["total"] for s in subjects)
     overall = round(attended / delivered * 100, 2) if delivered else None
 
-    subject_line, page = build_email(overall, attended, delivered, subjects)
-    if not send_email_via_api(recipient, subject_line, page):
+    subject_line, page = build_email(overall, attended, delivered, subjects, day)
+    text = build_plain(overall, attended, delivered, subjects, day)
+    if not send_email_via_api(recipient, subject_line, page, text):
         raise RuntimeError("Email could not be sent")
 
 
@@ -758,7 +995,16 @@ def process_user(user):
                 print(f"   ⚠️ Could not update strikes: {db_err}")
             return False
 
+        except SiteDownError as e:
+            print(f"   ⏸️ Portal is down, skipping this run (no strike, no retry): {e}")
+            print("::warning title=Portal down::NIET portal is down/under maintenance; nothing was sent this run.")
+            return "down"
+
         except Exception as e:
+            if is_site_down(driver):
+                print(f"   ⏸️ Portal went down mid-run ({type(e).__name__}); skipping (no strike, no retry).")
+                print("::warning title=Portal down::NIET portal is down/under maintenance; nothing was sent this run.")
+                return "down"
             print(f"   ❌ Attempt {attempt} failed: {type(e).__name__}: {e}")
             traceback.print_exc()
             if attempt == 1:
@@ -818,7 +1064,8 @@ def main():
 
     ok = True
     for u in mine:
-        ok = process_user(u) and ok
+        result = process_user(u)
+        ok = (result is True or result == "down") and ok   # a down portal is not a bot failure
     sys.exit(0 if ok else 1)
 
 
