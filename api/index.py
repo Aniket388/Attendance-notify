@@ -406,8 +406,14 @@ HTML_PAGE = """
 </body></html>
 """
 
-@app.route('/', methods=['GET', 'POST'])
-def home():
+# vercel.json rewrites every URL to /api/index, and depending on the Vercel runtime Flask can
+# receive either "/" or "/api/index" as the path. Accept ANY path so the page always loads.
+@app.route('/', defaults={'path': ''}, methods=['GET', 'POST'])
+@app.route('/<path:path>', methods=['GET', 'POST'])
+def home(path=''):
+    if path in ('favicon.ico', 'favicon.png', 'robots.txt'):
+        return ('', 204)
+
     message = None
     status = ""
 
