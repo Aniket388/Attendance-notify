@@ -196,7 +196,7 @@ HTML_PAGE = """
 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
 <span class="material-symbols-outlined text-[20px]">badge</span>
 </div>
-<input name="college_id" required class="w-full bg-black/30 border border-slate-700 rounded-lg py-3 pl-10 pr-4 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-600 hover:border-slate-600" placeholder="0231csiot...@niet.co.in" type="text"/>
+<input name="college_id" required class="w-full bg-black/30 border border-slate-700 rounded-lg py-3 pl-10 pr-4 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-600 hover:border-slate-600" placeholder="niet-cloud-id" type="text"/>
 </div>
 </div>
 <div>
