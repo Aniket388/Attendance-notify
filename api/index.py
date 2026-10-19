@@ -425,8 +425,8 @@ def home(path=''):
             email = request.form.get('email', '').strip()
 
             # 🛡️ VALIDATION RULE 1: Must be an NIET Email
-            if not college_id.endswith("@niet.co.in"):
-                 return render_template_string(HTML_PAGE, message="❌ Invalid ID! Please use your official college email (e.g., @niet.co.in)", status="error")
+            if not college_id:
+                 return render_template_string(HTML_PAGE, message="❌ Please enter the ID you use to log in to the college portal.", status="error")
 
             # 🛡️ VALIDATION RULE 2: No empty passwords
             if not password:
